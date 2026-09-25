@@ -17,7 +17,8 @@ export class SorKeungBrain {
         prompt: input.text,
         inputLanguage: input.inputLanguage,
         outputLanguage: input.outputLanguage,
-        responseLanguageMode: input.responseLanguageMode
+        responseLanguageMode: input.responseLanguageMode,
+        responseStyle: input.responseStyle
       });
 
       return {
