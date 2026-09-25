@@ -69,17 +69,3 @@ export function normalizePreferences(value: unknown): AppPreferences {
     allowedAppIds: normalizeAllowedAppIds(candidate.allowedAppIds)
   };
 }
-
-export function sidecarLanguageSettings(preferences: AppPreferences): {
-  responseLanguageMode: "follow-input" | "fixed";
-  outputLanguage?: "yue-HK" | "en-GB";
-} {
-  switch (preferences.responseLanguage) {
-    case "fixed-zh-HK":
-      return { responseLanguageMode: "fixed", outputLanguage: "yue-HK" };
-    case "fixed-en-GB":
-      return { responseLanguageMode: "fixed", outputLanguage: "en-GB" };
-    default:
-      return { responseLanguageMode: "follow-input" };
-  }
-}
