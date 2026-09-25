@@ -1,18 +1,27 @@
 {
   "name": "sor-keung",
-  "version": "0.1.0",
+  "version": "0.2.5",
   "private": true,
   "description": "Cantonese-first, multilingual, cross-platform desktop AI assistant.",
   "license": "GPL-3.0-only",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:frontend": "vite build",
+    "build:sidecar": "npm run build && mkdir -p src-tauri/binaries && pkg dist/desktop-sidecar.js --targets node24-macos-arm64 --output src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin --compress Brotli",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.desktop.json --noEmit",
     "test": "tsx --test test/**/*.test.ts",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.5",
     "@types/node": "^24.5.2",
+    "@yao-pkg/pkg": "6.22.0",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vite": "8.3.1"
   }
 }
