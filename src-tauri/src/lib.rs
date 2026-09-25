@@ -719,6 +719,46 @@ mod tests {
     }
 
     #[test]
+    fn preferences_json_round_trip_preserves_app_access_and_response_style() {
+        let original = PreferencesWire {
+            ui_language: "zh-HK".into(),
+            response_style: "written-zh-hk".into(),
+            response_language: "follow-input".into(),
+            allow_all_installed_apps: false,
+            allowed_app_ids: vec![
+                "bundle:com.apple.MobileSMS".into(),
+                "bundle:com.apple.calculator".into(),
+            ],
+        };
+
+        let encoded = serde_json::to_value(&original).unwrap();
+        let decoded = serde_json::from_value::<PreferencesWire>(encoded).unwrap();
+
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn switching_allow_all_on_preserves_selected_app_ids_for_future_reuse() {
+        let normalized = normalize_preferences(PreferencesWire {
+            allow_all_installed_apps: true,
+            allowed_app_ids: vec![
+                "bundle:com.apple.MobileSMS".into(),
+                "bundle:com.apple.calculator".into(),
+            ],
+            ..PreferencesWire::default()
+        });
+
+        assert!(normalized.allow_all_installed_apps);
+        assert_eq!(
+            normalized.allowed_app_ids,
+            vec![
+                "bundle:com.apple.MobileSMS".to_string(),
+                "bundle:com.apple.calculator".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn preference_normalization_keeps_atomic_app_policy_and_stable_ids() {
         let normalized = normalize_preferences(PreferencesWire {
             ui_language: "invalid".into(),
