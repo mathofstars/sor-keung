@@ -1,3 +1,5 @@
+import type { InstalledAppRecord } from "../apps/types";
+
 export const ALLOWED_ACTION_NAMES = [
   "open_app",
   "close_app",
@@ -10,8 +12,13 @@ export const ALLOWED_ACTION_NAMES = [
 
 export type AllowedActionName = (typeof ALLOWED_ACTION_NAMES)[number];
 
+export type OpenAppActionRequest = {
+  name: "open_app";
+  args: InstalledAppRecord;
+};
+
 export type ActionRequest =
-  | { name: "open_app"; args: { app: string } }
+  | OpenAppActionRequest
   | { name: "close_app"; args: { app: string } }
   | { name: "set_volume"; args: { percent: number } }
   | { name: "lock_screen"; args: Record<string, never> }
@@ -26,7 +33,9 @@ export interface ActionResult {
     | "NOT_IMPLEMENTED"
     | "UNSUPPORTED_ACTION"
     | "INVALID_ARGUMENT"
-    | "APP_NOT_FOUND";
+    | "APP_NOT_FOUND"
+    | "APP_AMBIGUOUS"
+    | "APP_BLOCKED";
   messageKey: string;
   data?: Record<string, unknown>;
 }
