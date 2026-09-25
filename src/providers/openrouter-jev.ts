@@ -1,10 +1,17 @@
+import {
+  StaticAppCatalog,
+  type AppCatalog
+} from "../apps/types";
+import {
+  extractRequestedAppName,
+  resolveInstalledApp
+} from "../apps/resolver";
 import { validateActionCandidate } from "../brain/validation";
 import type { DecisionInput, DecisionResult } from "../brain/types";
 import type { DecisionProvider } from "./types";
 
 const OPENROUTER_DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions";
 const DEFAULT_MODEL = "typesafe/jev-1.13";
-const DEFAULT_APPS = ["Spotify", "Safari", "Calculator"] as const;
 const DEFAULT_MIN_CONFIDENCE = 0.6;
 
 interface HttpResponse {
@@ -25,7 +32,7 @@ export type FetchLike = (
 export interface OpenRouterJevOptions {
   apiKey?: string;
   model?: string;
-  apps?: readonly string[];
+  appCatalog?: AppCatalog;
   minConfidence?: number;
   fetchImpl?: FetchLike;
 }
@@ -54,35 +61,22 @@ export class OpenRouterJevDecisionProvider implements DecisionProvider {
   readonly model: string;
 
   private readonly apiKey: string;
-  private readonly apps: readonly string[];
+  private readonly appCatalog: AppCatalog;
   private readonly minConfidence: number;
   private readonly fetchImpl: FetchLike;
 
   constructor(options: OpenRouterJevOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
     this.model = options.model ?? process.env.DECISION_MODEL ?? DEFAULT_MODEL;
-    this.apps = options.apps ?? DEFAULT_APPS;
+    this.appCatalog = options.appCatalog ?? new StaticAppCatalog([]);
     this.minConfidence = options.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
-    this.fetchImpl = options.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+    this.fetchImpl =
+      options.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
   }
 
   async decide(input: DecisionInput): Promise<DecisionResult> {
     if (!this.apiKey) {
       throw new Error("OPENROUTER_API_KEY is missing");
-    }
-
-    const optionToApp = Object.fromEntries(
-      this.apps.map((app, index) => [`open_app_${index}`, app])
-    ) as Record<string, string>;
-
-    const criteria: Record<string, string> = {
-      llm:
-        "The request is a general question, explanation, writing or summarisation request, an unsupported computer action, or anything that is not clearly an allowed open-app action below."
-    };
-
-    for (const [option, app] of Object.entries(optionToApp)) {
-      criteria[option] =
-        `The user clearly asks to open, launch, or start the desktop application named "${app}".`;
     }
 
     let response: HttpResponse;
@@ -100,8 +94,13 @@ export class OpenRouterJevDecisionProvider implements DecisionProvider {
             intent: {
               type: "choice",
               instructions:
-                "Route the request. Select an open_app option only when the user clearly asks to open exactly that listed desktop application. Route every other request to llm. Never invent an OS action.",
-              criteria
+                "Route the request. Choose open_app only when the user clearly asks Sor-Keung to open, launch, or start a desktop application. Do not decide which application exists; local trusted code will resolve the requested name against the installed-app catalogue. Route every other request to llm. Never invent an OS action, executable path, shell command, or binary.",
+              criteria: {
+                open_app:
+                  "The user clearly asks to open, launch, or start a desktop application.",
+                llm:
+                  "The request is a general question, explanation, writing or summarisation request, an unsupported computer action, or anything that is not clearly an open-application request."
+              }
             }
           }
         })
@@ -139,18 +138,46 @@ export class OpenRouterJevDecisionProvider implements DecisionProvider {
       return { route: "llm" };
     }
 
-    const app = optionToApp[answer.choice];
-    if (!app) {
+    if (answer.choice !== "open_app") {
       throw new Error("Unexpected Jev choice");
+    }
+
+    const apps = await this.appCatalog.list();
+    const resolution = resolveInstalledApp(input.text, apps);
+    const requestedName =
+      extractRequestedAppName(input.text) || input.text.trim();
+
+    if (resolution.kind === "not-found") {
+      return {
+        route: "action_error",
+        result: {
+          ok: false,
+          code: "APP_NOT_FOUND",
+          messageKey: "actions.appNotFound",
+          data: { app: requestedName }
+        }
+      };
+    }
+
+    if (resolution.kind === "ambiguous") {
+      return {
+        route: "action_error",
+        result: {
+          ok: false,
+          code: "APP_AMBIGUOUS",
+          messageKey: "actions.appAmbiguous",
+          data: { app: requestedName }
+        }
+      };
     }
 
     const action = validateActionCandidate({
       action: "open_app",
-      parameters: { app }
+      parameters: resolution.app
     });
 
     if (!action) {
-      throw new Error("Jev decision failed internal validation");
+      throw new Error("Resolved app failed internal validation");
     }
 
     return { route: "action", action };
