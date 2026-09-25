@@ -13,7 +13,13 @@ export const DEFAULT_UI_LANGUAGE: SupportedUiLanguage = "zh-HK";
 
 export function t(
   key: TranslationKey,
-  locale: SupportedUiLanguage = DEFAULT_UI_LANGUAGE
+  locale: SupportedUiLanguage = DEFAULT_UI_LANGUAGE,
+  params: Record<string, string> = {}
 ): string {
-  return dictionaries[locale][key] ?? dictionaries["en-GB"][key];
+  const template = dictionaries[locale][key] ?? dictionaries["en-GB"][key];
+
+  return Object.entries(params).reduce(
+    (message, [name, value]) => message.replaceAll(`{${name}}`, value),
+    template
+  );
 }
