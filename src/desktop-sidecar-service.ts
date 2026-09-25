@@ -38,8 +38,32 @@ export interface DesktopSidecarDependencies {
   appAccessPolicy?: AppAccessPolicy;
 }
 
-function localeFor(request: DesktopSidecarRequest): SupportedUiLanguage {
+function uiLocaleFor(request: DesktopSidecarRequest): SupportedUiLanguage {
   return request.uiLanguage === "en-GB" ? "en-GB" : "zh-HK";
+}
+
+function responseLocaleFor(
+  request: DesktopSidecarRequest
+): SupportedUiLanguage {
+  if (request.responseLanguageMode === "fixed") {
+    return request.outputLanguage === "en-GB" || request.outputLanguage === "en"
+      ? "en-GB"
+      : "zh-HK";
+  }
+
+  if (request.inputLanguage === "en-GB" || request.inputLanguage === "en") {
+    return "en-GB";
+  }
+
+  if (
+    request.inputLanguage === "zh-HK" ||
+    request.inputLanguage === "yue-HK" ||
+    request.inputLanguage === "yue"
+  ) {
+    return "zh-HK";
+  }
+
+  return /\p{Script=Han}/u.test(request.input) ? "zh-HK" : "en-GB";
 }
 
 function actionMessageKey(
@@ -62,7 +86,8 @@ export async function handleDesktopSidecarRequest(
   request: DesktopSidecarRequest,
   dependencies: DesktopSidecarDependencies
 ): Promise<DesktopSidecarResponse> {
-  const locale = localeFor(request);
+  const uiLocale = uiLocaleFor(request);
+  const responseLocale = responseLocaleFor(request);
   const input = request.input?.trim();
   const responseStyle = request.responseStyle ?? "cantonese-hk";
 
@@ -70,7 +95,7 @@ export async function handleDesktopSidecarRequest(
     return {
       ok: false,
       kind: "error",
-      message: t("desktop.invalidRequest", locale)
+      message: t("desktop.invalidRequest", uiLocale)
     };
   }
 
@@ -104,8 +129,8 @@ export async function handleDesktopSidecarRequest(
     const app =
       result.data && typeof result.data.app === "string" ? result.data.app : "";
     const message = t(
-      actionMessageKey(result.messageKey, locale, responseStyle),
-      locale,
+      actionMessageKey(result.messageKey, responseLocale, responseStyle),
+      responseLocale,
       { app }
     );
 
@@ -118,7 +143,7 @@ export async function handleDesktopSidecarRequest(
     return {
       ok: false,
       kind: "error",
-      message: t("desktop.aiServiceUnavailable", locale)
+      message: t("desktop.aiServiceUnavailable", uiLocale)
     };
   }
 }
@@ -127,14 +152,14 @@ export async function handleDesktopSidecarRequestFromEnvironment(
   request: DesktopSidecarRequest,
   environment: NodeJS.ProcessEnv = process.env
 ): Promise<DesktopSidecarResponse> {
-  const locale = localeFor(request);
+  const uiLocale = uiLocaleFor(request);
   const apiKey = environment.OPENROUTER_API_KEY?.trim() ?? "";
 
   if (!apiKey) {
     return {
       ok: false,
       kind: "error",
-      message: t("desktop.missingApiKey", locale)
+      message: t("desktop.missingApiKey", uiLocale)
     };
   }
 
@@ -142,7 +167,7 @@ export async function handleDesktopSidecarRequestFromEnvironment(
     return {
       ok: false,
       kind: "error",
-      message: t("platform.unsupported", locale)
+      message: t("platform.unsupported", uiLocale)
     };
   }
 
@@ -168,7 +193,7 @@ export async function handleDesktopSidecarRequestFromEnvironment(
     return {
       ok: false,
       kind: "error",
-      message: t("desktop.aiServiceUnavailable", locale)
+      message: t("desktop.aiServiceUnavailable", uiLocale)
     };
   }
 }
