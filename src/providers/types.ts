@@ -10,8 +10,20 @@ export interface DecisionProvider extends ProviderMetadata {
   decide(input: DecisionInput): Promise<DecisionResult>;
 }
 
+export interface LlmRequest {
+  prompt: string;
+  inputLanguage?: string;
+  outputLanguage?: string;
+  responseLanguageMode?: "follow-input" | "fixed";
+}
+
+export interface LlmResponse {
+  text: string;
+  language?: string;
+}
+
 export interface LlmProvider extends ProviderMetadata {
-  generate(request: { prompt: string; inputLanguage?: string; outputLanguage?: string }): Promise<{ text: string; language?: string }>;
+  generate(request: LlmRequest): Promise<LlmResponse>;
 }
 
 export interface SttProvider extends ProviderMetadata {
