@@ -7,7 +7,7 @@ Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assist
 **Stage 3 — Desktop UI & Secure Settings**
 
 - **FINAL STAGE 3 PHYSICAL-ACCEPTANCE FIXES IMPLEMENTED**
-- **FINAL MANUAL CI VERIFICATION PENDING**
+- **FINAL AUTOMATED BUILD VERIFIED — GitHub Actions run #77**
 - **PHYSICAL MAC ACCEPTANCE PENDING**
 - Development branch: `feature/stage-3-desktop-ui`
 - Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
@@ -367,7 +367,7 @@ Workflow:
 .github/workflows/stage2-5-macos-build.yml
 ```
 
-To conserve GitHub Actions minutes during final Stage 3 development, this workflow is now **manual-only**. It no longer runs on every feature-branch commit.
+To conserve GitHub Actions minutes, normal feature-branch source commits do **not** run the full workflow. It can be started manually, or by deliberately updating the dedicated `.github/final-stage3-ci-trigger` sentinel file.
 
 The final workflow is split into two gates:
 
@@ -395,16 +395,28 @@ macOS arm64 build
 
 This prevents a TypeScript regression from consuming expensive macOS runner minutes.
 
-The previous accepted Stage 3 base and installed-app implementation were built successfully before these final physical-acceptance fixes. The current final-fix branch is intentionally waiting for **one final complete manual CI run** after all source and documentation changes are finished.
-
-The current regression suite contains approximately:
+Final physical-acceptance-fix verification:
 
 ```text
-TypeScript tests: 93
-Rust credential/settings/bridge tests: 8
-```
+GitHub Actions run: #77
+Tested commit: 5f4bf6742f9ef6f5c10888419441db3cc52e2b91
+Conclusion: SUCCESS
 
-The final completion report uses the actual counts from that one final workflow run rather than treating these pre-run counts as verified.
+Ubuntu verification:
+TypeScript typecheck: PASS
+TypeScript tests: 93 passed / 0 failed
+Frontend production build: PASS
+
+macOS arm64:
+Rust credential/settings/bridge tests: 8 passed / 0 failed
+Node sidecar: Mach-O 64-bit executable arm64
+Sidecar codesign verification: PASS
+Tauri .app build: PASS
+Tauri .dmg build: PASS
+macOS launch metadata: PASS
+Direct-run app packaging: PASS
+Artifact uploads: PASS
+```
 
 No real OpenRouter API key or Apple Developer credential is required by CI.
 
