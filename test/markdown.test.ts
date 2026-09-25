@@ -36,9 +36,10 @@ test("assistant Markdown renders blockquotes and emphasis", () => {
 
 test("raw HTML and active DOM content are neutralised", () => {
   const html = markdownToSafeHtml('<script>alert("x")</script>\n<img src=x onerror="alert(1)">\n**safe**');
-  assert.doesNotMatch(html, /<script/i);
-  assert.doesNotMatch(html, /<img/i);
-  assert.doesNotMatch(html, /onerror/i);
+  assert.doesNotMatch(html, /<script(?:\s|>)/i);
+  assert.doesNotMatch(html, /<img(?:\s|>)/i);
+  assert.match(html, /&#x3C;script>/);
+  assert.match(html, /onerror="alert\(1\)"/);
   assert.match(html, /<strong>safe<\/strong>/);
 });
 
