@@ -53,7 +53,7 @@ test("desktop wrapper preserves the existing open_app action pipeline", async ()
   assert.deepEqual(result, {
     ok: true,
     kind: "action",
-    message: "✓ 已開啟 Spotify"
+    message: "✓ Spotify 已經幫你開咗。"
   });
   assert.equal(llmCalls, 0);
   assert.deepEqual(actions, [
@@ -61,9 +61,50 @@ test("desktop wrapper preserves the existing open_app action pipeline", async ()
   ]);
 });
 
+test("written response style also affects Chinese action acknowledgement", async () => {
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return {
+        route: "action",
+        action: { name: "open_app", args: { app: "Safari" } }
+      };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      return {
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "Safari" }
+      };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "開 Safari",
+      uiLanguage: "zh-HK",
+      responseStyle: "written-zh-hk"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.equal(result.message, "✓ 已開啟 Safari");
+});
+
 test("desktop wrapper preserves the existing LLM text-only route", async () => {
   let actionCalls = 0;
   let llmPrompt = "";
+  let responseStyle = "";
 
   const decisionProvider: DecisionProvider = {
     id: "mock-decision",
@@ -76,7 +117,8 @@ test("desktop wrapper preserves the existing LLM text-only route", async () => {
     id: "mock-llm",
     async generate(request) {
       llmPrompt = request.prompt;
-      return { text: "量子糾纏是一種量子力學現象。" };
+      responseStyle = request.responseStyle ?? "";
+      return { text: "量子糾纏係一種量子力學現象。" };
     }
   };
 
@@ -96,10 +138,11 @@ test("desktop wrapper preserves the existing LLM text-only route", async () => {
   assert.deepEqual(result, {
     ok: true,
     kind: "llm",
-    message: "量子糾纏是一種量子力學現象。"
+    message: "量子糾纏係一種量子力學現象。"
   });
   assert.equal(actionCalls, 0);
   assert.equal(llmPrompt, "解釋量子糾纏是甚麼");
+  assert.equal(responseStyle, "cantonese-hk");
 });
 
 test("action failures become structured error results", async () => {
@@ -140,11 +183,11 @@ test("action failures become structured error results", async () => {
   assert.deepEqual(result, {
     ok: false,
     kind: "error",
-    message: "無法開啟應用程式：ExampleApp"
+    message: "找不到指定的應用程式：ExampleApp"
   });
 });
 
-test("missing session API key fails clearly without network access", async () => {
+test("missing API key fails clearly without network access", async () => {
   const result = await handleDesktopSidecarRequestFromEnvironment(
     { input: "開 Spotify", uiLanguage: "zh-HK" },
     {}
@@ -153,7 +196,7 @@ test("missing session API key fails clearly without network access", async () =>
   assert.deepEqual(result, {
     ok: false,
     kind: "error",
-    message: "請輸入 OpenRouter API Key。"
+    message: "尚未設定 OpenRouter API Key。"
   });
 });
 
