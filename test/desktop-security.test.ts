@@ -85,3 +85,11 @@ test("desktop settings never persist the API key", async () => {
   assert.doesNotMatch(frontend, /localStorage|sessionStorage|indexedDB/);
   assert.match(html, /id="api-key-input"[\s\S]*type="password"/);
 });
+
+test("macOS launcher remains fixed execFile with shell disabled", async () => {
+  const adapter = await readFile("src/actions/macos/index.ts", "utf8");
+
+  assert.match(adapter, /const MACOS_OPEN = "\/usr\/bin\/open"/);
+  assert.match(adapter, /execFile\(executable, \[\.\.\.args\], \{ shell: false \}/);
+  assert.doesNotMatch(adapter, /exec\(/);
+});
