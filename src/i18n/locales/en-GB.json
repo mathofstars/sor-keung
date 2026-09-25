@@ -58,5 +58,7 @@
   "settings.appAccessNone": "No installed applications were found.",
   "settings.appAccessLoadError": "Unable to load the installed application list.",
   "actions.appBlocked": "This application is not allowed to open: {app}",
-  "actions.appAmbiguous": "More than one installed application could match. Please specify which application to open: {app}"
+  "actions.appAmbiguous": "More than one installed application could match. Please specify which application to open: {app}",
+  "settings.loading": "Loading saved settings…",
+  "settings.loadError": "Unable to load saved settings. Return to chat and try again."
 }
