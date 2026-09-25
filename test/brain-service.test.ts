@@ -5,6 +5,17 @@ import type { ActionAdapter, ActionRequest } from "../src/actions/types";
 import { SorKeungBrain } from "../src/brain/service";
 import type { DecisionProvider, LlmProvider, LlmRequest } from "../src/providers/types";
 
+const spotify: ActionRequest = {
+  name: "open_app",
+  args: {
+    id: "bundle:com.spotify.client",
+    displayName: "Spotify",
+    platform: "macos",
+    bundleIdentifier: "com.spotify.client",
+    launchName: "Spotify"
+  }
+};
+
 function makeAdapter(calls: ActionRequest[]): ActionAdapter {
   return {
     platform: "macos",
@@ -14,13 +25,16 @@ function makeAdapter(calls: ActionRequest[]): ActionAdapter {
         ok: true,
         code: "OK",
         messageKey: "actions.openedApp",
-        data: request.name === "open_app" ? { app: request.args.app } : undefined
+        data:
+          request.name === "open_app"
+            ? { app: request.args.displayName }
+            : undefined
       };
     }
   };
 }
 
-test("OS action route dispatches action and does not call LLM", async () => {
+test("OS action route dispatches trusted app and does not call LLM", async () => {
   const actionCalls: ActionRequest[] = [];
   let llmCalls = 0;
 
@@ -29,7 +43,7 @@ test("OS action route dispatches action and does not call LLM", async () => {
     async decide() {
       return {
         route: "action",
-        action: { name: "open_app", args: { app: "Spotify" } }
+        action: spotify
       };
     }
   };
@@ -52,9 +66,63 @@ test("OS action route dispatches action and does not call LLM", async () => {
 
   assert.equal(result.kind, "action");
   assert.equal(llmCalls, 0);
-  assert.deepEqual(actionCalls, [
-    { name: "open_app", args: { app: "Spotify" } }
-  ]);
+  assert.deepEqual(actionCalls, [spotify]);
+});
+
+test("safe app-resolution error does not call LLM or OS adapter", async () => {
+  let llmCalled = false;
+  let actionCalled = false;
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return {
+        route: "action_error",
+        result: {
+          ok: false,
+          code: "APP_NOT_FOUND",
+          messageKey: "actions.appNotFound",
+          data: { app: "MissingApp" }
+        }
+      };
+    }
+  };
+
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      llmCalled = true;
+      return { text: "should not run" };
+    }
+  };
+
+  const adapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      actionCalled = true;
+      return { ok: true, code: "OK", messageKey: "unexpected" };
+    }
+  };
+
+  const brain = new SorKeungBrain(
+    decisionProvider,
+    llmProvider,
+    new ActionDispatcher(adapter)
+  );
+
+  const result = await brain.handle({ text: "Open MissingApp" });
+
+  assert.deepEqual(result, {
+    kind: "action",
+    result: {
+      ok: false,
+      code: "APP_NOT_FOUND",
+      messageKey: "actions.appNotFound",
+      data: { app: "MissingApp" }
+    }
+  });
+  assert.equal(llmCalled, false);
+  assert.equal(actionCalled, false);
 });
 
 test("general request invokes LLM and does not call action adapter", async () => {
