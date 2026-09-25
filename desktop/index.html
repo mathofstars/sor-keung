@@ -71,6 +71,21 @@
             <p id="api-key-operation-status" class="setting-help" aria-live="polite"></p>
           </section>
 
+          <section class="settings-card" aria-labelledby="app-access-title">
+            <h3 id="app-access-title">應用程式存取</h3>
+            <label class="toggle-row" for="allow-all-installed-apps">
+              <input id="allow-all-installed-apps" type="checkbox" checked />
+              <span id="allow-all-installed-apps-label">允許開啟所有已安裝應用程式</span>
+            </label>
+            <p id="app-access-help" class="setting-help">
+              關閉後，只可開啟你在下面明確允許的應用程式。
+            </p>
+            <div id="app-access-list-container" hidden>
+              <p id="app-access-status" class="setting-help" aria-live="polite"></p>
+              <div id="app-access-list" class="app-access-list"></div>
+            </div>
+          </section>
+
           <section class="settings-card" aria-labelledby="preferences-title">
             <h3 id="preferences-title">偏好設定</h3>
 
