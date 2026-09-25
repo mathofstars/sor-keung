@@ -1,6 +1,6 @@
 {
   "name": "sor-keung",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "private": true,
   "description": "Cantonese-first, multilingual, cross-platform desktop AI assistant.",
   "license": "GPL-3.0-only",
@@ -14,7 +14,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.11.1"
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-store": "2.4.4"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.5",
