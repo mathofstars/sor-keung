@@ -1,4 +1,4 @@
-import type { ActionRequest } from "../actions/types";
+import type { ActionRequest, ActionResult } from "../actions/types";
 
 export interface DecisionInput {
   text: string;
@@ -9,4 +9,8 @@ export interface DecisionInput {
 
 export type DecisionResult =
   | { route: "action"; action: ActionRequest }
-  | { route: "unsupported"; reason?: string };
+  | { route: "llm" };
+
+export type BrainResponse =
+  | { kind: "action"; result: ActionResult }
+  | { kind: "text"; text: string; language?: string };
