@@ -14,16 +14,20 @@ test("default Chinese response style is natural Hong Kong conversational Cantone
   assert.match(prompt, /not.*Simplified Chinese/i);
 });
 
-test("written Hong Kong Chinese style changes the style instruction", () => {
+test("written Hong Kong Chinese style explicitly requires standard written grammar", () => {
   const prompt = buildSorKeungSystemPrompt({
     prompt: "解釋量子糾纏",
     responseLanguageMode: "follow-input",
     responseStyle: "written-zh-hk"
   });
 
-  assert.match(prompt, /Hong Kong Traditional Chinese written style/i);
-  assert.match(prompt, /avoid heavily colloquial Cantonese/i);
-  assert.doesNotMatch(prompt, /conversational Hong Kong Cantonese/i);
+  assert.match(prompt, /standard written Hong Kong Traditional Chinese/i);
+  assert.match(prompt, /standard written Chinese grammar/i);
+  assert.match(prompt, /not conversational Cantonese/i);
+  assert.match(prompt, /Do not use Simplified Chinese/i);
+  assert.match(prompt, /係、唔、佢、佢哋、點解、咁、嚟、嘅、喺、咗/);
+  assert.match(prompt, /是、不/);
+  assert.doesNotMatch(prompt, /natural written conversational Hong Kong Cantonese/i);
 });
 
 test("fixed en-GB output requests English", () => {
