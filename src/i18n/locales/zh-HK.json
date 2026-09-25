@@ -50,5 +50,13 @@
   "desktop.invalidRequest": "輸入內容無效。",
   "desktop.sidecarFailure": "Sor-Keung 處理要求時發生錯誤。",
   "desktop.aiServiceUnavailable": "暫時未能連接 AI 服務，請稍後再試。",
-  "error.runtime": "錯誤：{message}"
+  "error.runtime": "錯誤：{message}",
+  "settings.appAccess": "應用程式存取",
+  "settings.allowAllInstalledApps": "允許開啟所有已安裝應用程式",
+  "settings.appAccessHelp": "關閉後，只可開啟你在下面明確允許的應用程式。",
+  "settings.appAccessLoading": "正在讀取已安裝應用程式…",
+  "settings.appAccessNone": "找不到可用的已安裝應用程式。",
+  "settings.appAccessLoadError": "未能讀取已安裝應用程式清單。",
+  "actions.appBlocked": "這個應用程式未獲允許開啟：{app}",
+  "actions.appAmbiguous": "找到多個可能的應用程式，請指定要開啟哪一個：{app}"
 }
