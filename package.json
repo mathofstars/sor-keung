@@ -15,7 +15,10 @@
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
-    "@tauri-apps/plugin-store": "2.4.4"
+    "mdast-util-from-markdown": "^2.0.2",
+    "mdast-util-to-hast": "^13.2.0",
+    "hast-util-sanitize": "^5.0.2",
+    "hast-util-to-html": "^9.0.5"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.5",
