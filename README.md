@@ -7,7 +7,7 @@ Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assist
 **Stage 3 — Desktop UI & Secure Settings**
 
 - **FINAL STAGE 3 PHYSICAL-ACCEPTANCE FIXES IMPLEMENTED**
-- **FINAL AUTOMATED BUILD VERIFIED — GitHub Actions run #77**
+- **SAFARI RESOLUTION + TAHOE SIDECAR FIXES IMPLEMENTED — FINAL CI PENDING**
 - **PHYSICAL MAC ACCEPTANCE PENDING**
 - Development branch: `feature/stage-3-desktop-ui`
 - Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
@@ -285,6 +285,15 @@ Resolution rules are deliberately fail-safe:
 - multiple plausible matches → report ambiguity and launch nothing
 - no installed-app match → report app not found
 - model/user text never becomes an executable path
+- bundle identifiers are **never** treated as human-facing name aliases
+
+On modern macOS, the trusted catalogue also scans the App Cryptex application root used by Safari:
+
+```text
+/System/Volumes/Preboot/Cryptexes/App/System/Applications
+```
+
+This prevents an extension whose bundle identifier happens to end in `.Safari` (for example a “Save to …” extension app) from being mistaken for the real Safari. A request for `Open Safari` must resolve the installed app whose trusted human-facing name is Safari, or fail safely if Safari is absent.
 
 On macOS, the adapter prefers the resolved trusted bundle identifier:
 
@@ -395,28 +404,24 @@ macOS arm64 build
 
 This prevents a TypeScript regression from consuming expensive macOS runner minutes.
 
-Final physical-acceptance-fix verification:
+Previous final physical-acceptance-fix verification before the Safari/JIT packaging corrections:
 
 ```text
-GitHub Actions run: #77
-Tested commit: 5f4bf6742f9ef6f5c10888419441db3cc52e2b91
+GitHub Actions run: #78
+Tested commit: 1ded7d9d01e924cc69c759edc8d75f8b879fa253
 Conclusion: SUCCESS
 
-Ubuntu verification:
-TypeScript typecheck: PASS
-TypeScript tests: 93 passed / 0 failed
-Frontend production build: PASS
-
-macOS arm64:
+TypeScript tests: 94 passed / 0 failed
 Rust credential/settings/bridge tests: 8 passed / 0 failed
-Node sidecar: Mach-O 64-bit executable arm64
-Sidecar codesign verification: PASS
-Tauri .app build: PASS
-Tauri .dmg build: PASS
-macOS launch metadata: PASS
-Direct-run app packaging: PASS
-Artifact uploads: PASS
+Apple Silicon .app / .dmg build: PASS
 ```
+
+The current branch contains two additional physical-Mac fixes discovered afterwards:
+
+1. Safari/Cryptex installed-app resolution and bundle-ID alias collision prevention.
+2. Node/V8 sidecar JIT entitlement signing for Hardened Runtime on macOS Tahoe.
+
+Those changes are intentionally being accumulated without per-commit Actions runs. One final CI run will verify the current source after the static audit is complete.
 
 No real OpenRouter API key or Apple Developer credential is required by CI.
 
@@ -438,6 +443,14 @@ signingIdentity: "-"
 ```
 
 They are not Developer ID signed or notarized.
+
+The bundled Node/V8 sidecar runs under macOS Hardened Runtime and therefore requires the narrowly scoped JIT entitlement:
+
+```text
+com.apple.security.cs.allow-jit = true
+```
+
+Physical testing on macOS Tahoe 26.6.2 proved the failure mode directly: without this entitlement the sidecar aborted during V8 startup with `Failed to reserve virtual memory for CodeRange`; re-signing only the sidecar with `allow-jit` made the same binary start normally. The build pipeline now re-signs the packaged sidecar with `src-tauri/SidecarEntitlements.plist`, re-signs the containing app, verifies the entitlement, and runs a no-API-key sidecar smoke test before packaging artifacts. It does **not** add `allow-unsigned-executable-memory` or disable library validation.
 
 Stage 2.5 physical acceptance established that, on the current enterprise-managed macOS 27 Golden Gate Mac, a downloaded ad-hoc build may be held before application startup at `_dyld_start`.
 
