@@ -333,3 +333,74 @@ textarea {
 .error-text {
   color: #9b2c24;
 }
+.settings-loading-status {
+  max-width: 720px;
+  margin: 24px auto;
+  padding: 16px 18px;
+  border: 1px solid #dde1e6;
+  border-radius: 10px;
+  background: #fff;
+  color: #68717d;
+}
+
+.message.assistant .message-body {
+  white-space: normal;
+}
+
+.message.assistant .message-body > :first-child {
+  margin-top: 0;
+}
+
+.message.assistant .message-body > :last-child {
+  margin-bottom: 0;
+}
+
+.message.assistant .message-body p,
+.message.assistant .message-body ul,
+.message.assistant .message-body ol,
+.message.assistant .message-body blockquote,
+.message.assistant .message-body pre {
+  margin: 0 0 10px;
+}
+
+.message.assistant .message-body h1,
+.message.assistant .message-body h2,
+.message.assistant .message-body h3,
+.message.assistant .message-body h4,
+.message.assistant .message-body h5,
+.message.assistant .message-body h6 {
+  margin: 14px 0 8px;
+  line-height: 1.25;
+}
+
+.message.assistant .message-body ul,
+.message.assistant .message-body ol {
+  padding-left: 24px;
+}
+
+.message.assistant .message-body blockquote {
+  padding-left: 12px;
+  border-left: 3px solid #c8ced7;
+  color: #59616d;
+}
+
+.message.assistant .message-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 0.92em;
+  background: #f1f3f5;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.message.assistant .message-body pre {
+  overflow-x: auto;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: #f1f3f5;
+}
+
+.message.assistant .message-body pre code {
+  padding: 0;
+  background: transparent;
+}
+
