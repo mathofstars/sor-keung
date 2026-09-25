@@ -4,156 +4,220 @@ Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assist
 
 ## Current status
 
-**Stage 2.5 — macOS Apple Silicon test package**
+**Stage 3 — Desktop UI & Secure Settings**
 
-- **BUILD VERIFIED**
-- **PHYSICAL MAC ACCEPTANCE PASSED**
+- **DEVELOPMENT IMPLEMENTED**
+- **AUTOMATED BUILD VERIFIED**
+- **PHYSICAL MAC ACCEPTANCE PENDING**
+- Development branch: `feature/stage-3-desktop-ui`
 - Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
-- Physical acceptance completed on an Apple Silicon M1 Mac running macOS 27 Golden Gate in a corporate-managed environment.
-- This is a development/testing package, not a notarized public release.
+- This is an internal development/testing package, not a notarized public release.
 
-Stage 2.5 wraps the existing Stage 2 TypeScript/Node.js core in a minimal Tauri v2 desktop shell. The Sor-Keung brain remains the source of truth; it has not been rewritten in Rust or moved into the webview.
+Stage 3 turns the Stage 2.5 test shell into the first usable text-first desktop application. Voice remains a later-stage feature.
 
 ## Architecture
 
 ```text
-┌──────────────────────────────────────┐
-│             Tauri .app               │
-│                                      │
-│   Minimal TypeScript UI              │
-│          │                           │
-│          ▼                           │
-│   invoke("run_sor_keung")            │
-│          │                           │
-│          ▼                           │
-│   Narrow Rust bridge                 │
-│          │                           │
-│          ▼                           │
-│   Bundled Node sidecar               │
-│          │                           │
-│          ▼                           │
-│   EXISTING Stage 2 Brain             │
-│          │                           │
-│       Jev Router                     │
-│       /       \                      │
-│ Action          LLM                  │
-│   │              │                   │
-│ validation    OpenRouter             │
-│   │              │                   │
-│ dispatcher    text only              │
-│   │                                  │
-│ macOS open_app                       │
-└──────────────────────────────────────┘
+Tauri frontend
+   │
+   ├─ chat UI / session transcript
+   ├─ non-secret preferences → Tauri Store
+   │
+   └─ narrow invoke commands
+          │
+          ▼
+      Rust bridge
+          │
+          ├─ API key status/save/delete → OS credential store
+          │                               (macOS Keychain)
+          │
+          └─ run_sor_keung(request)
+                  │
+                  ├─ retrieve API key from Keychain
+                  ├─ fixed bundled Node sidecar
+                  └─ OPENROUTER_API_KEY in child environment only
+                              │
+                              ▼
+                     Existing TypeScript/Node brain
+                              │
+                             Jev
+                         ┌────┴────┐
+                         ▼         ▼
+                      action      LLM
+                         │         │
+                    validation  OpenRouter
+                         │         │
+                    dispatcher  text only
+                         │
+                    macOS adapter
 ```
 
-The Tauri layer is only transport/UI. It does not duplicate Jev, LLM, validation, dispatcher, or action logic.
+The existing Sor-Keung brain remains the source of truth. Routing is not duplicated in the frontend, Rust bridge, or settings layer.
 
-## Current functionality
+## Desktop UI
 
-The test app contains only:
+Stage 3 provides:
 
-- Sor-Keung / 傻強 title
-- session-only OpenRouter API key password field
-- one text input
-- Send button
-- loading/error/result state
+- chat-style session transcript
+- user and Sor-Keung messages
+- multiline input
+- Enter to send
+- Shift+Enter for a newline
+- loading state
+- duplicate-submit protection
+- clear error presentation
+- Settings view
+- keyboard-accessible controls
+- resizable desktop window with minimum usable dimensions
 
-Existing Stage 1/2 behaviour remains:
+The transcript is **session-only UI state**. Closing the app may clear it.
 
-- `開 Spotify` / `Open Spotify` → Jev → validated `open_app` → macOS adapter
-- general questions → Jev → configured LLM → text response
-- LLM output is never converted into an executable action
-
-Current executable app catalogue remains intentionally small:
-
-- Spotify
-- Safari
-- Calculator
-
-## macOS packaging
-
-Current packaging versions:
-
-- Tauri Rust crate: `2.11.6`
-- Tauri CLI: `2.11.5`
-- `@tauri-apps/api`: `2.11.1`
-- `tauri-plugin-shell`: `2.3.6`
-- Node sidecar packager: `@yao-pkg/pkg 6.22.0`
-- sidecar target: `node24-macos-arm64`
-- Tauri target: `aarch64-apple-darwin`
-
-The standalone Node sidecar is named using Tauri's target-triple convention:
+The LLM remains deliberately **single-turn**:
 
 ```text
-src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
+system prompt
++
+current user message
 ```
 
-The end user does **not** need Node.js, npm, Rust, or Cargo installed to run the packaged app.
+The visible transcript is not silently sent back to the model and is not persistent AI memory.
 
-The app iconset is generated during CI from `app-icon.svg` using Tauri's own `tauri icon` command.
+## Settings
 
-## API key handling
+### Interface language
 
-The OpenRouter API key is **session-only**.
+Supported:
+
+- 繁體中文（香港） — `zh-HK`
+- English — `en-GB`
+
+UI language is independent from response style.
+
+### Chinese response style
+
+Default:
 
 ```text
-password input
-    ↓
-Tauri invoke
-    ↓
-Rust run_sor_keung command
-    ↓
-child-process environment
-OPENROUTER_API_KEY=<session value>
-    ↓
-bundled Sor-Keung sidecar
+香港口語廣東話
+cantonese-hk
 ```
 
-The key is **not**:
+Alternative:
 
-- committed to Git
-- bundled into the application
-- stored in `.env` inside the app
-- saved to `localStorage`, `sessionStorage`, preferences, JSON, or another settings file
-- logged
+```text
+香港繁體中文書面語
+written-zh-hk
+```
+
+The system-prompt builder combines the common Sor-Keung instructions, language behaviour, and the selected response-style instruction without duplicating the whole prompt.
+
+Conversational Cantonese aims for natural Hong Kong written Cantonese without forcing slang or sentence-final particles into every sentence.
+
+### Response language
+
+Stage 3 retains:
+
+- Follow input language
+- fixed Traditional Chinese (Hong Kong)
+- fixed English
+
+The default remains **Follow input language**.
+
+## Secure OpenRouter API-key storage
+
+Stage 2.5 used session-only API-key entry. Stage 3 stores the OpenRouter credential using the Rust `keyring` 4.x OS-native credential abstraction.
+
+On macOS this uses **macOS Keychain Services**. The same abstraction is suitable for future Windows support through the native Windows credential store.
+
+Narrow Rust commands:
+
+```text
+has_api_key()
+save_api_key(secret)
+delete_api_key()
+run_sor_keung(request)
+```
+
+There is intentionally **no** command that returns the stored raw key to JavaScript.
+
+Normal chat flow:
+
+```text
+Frontend
+   │ run_sor_keung(request)
+   ▼
+Rust bridge
+   │ retrieve API key from Keychain
+   ▼
+fixed bundled sidecar
+   │ OPENROUTER_API_KEY=<secret> in child environment
+   ▼
+existing Sor-Keung core
+```
+
+The stored key is not:
+
+- returned to the frontend
+- displayed after saving
+- placed in Tauri Store
+- saved to localStorage/sessionStorage/IndexedDB
 - passed as a sidecar command-line argument
-- required as a GitHub Actions secret
+- logged
+- committed to Git
+- required by CI
 
-The user pastes the key again after relaunching the Stage 2.5 test app.
+To configure it, open **Settings → OpenRouter API Key**, enter a new key and choose **Add / Replace key**. Settings exposes only configured/not-configured status. The key can also be removed from Settings.
+
+## Non-secret settings persistence
+
+The official Tauri Store plugin persists only non-secret preferences:
+
+- `UI_LANGUAGE`
+- `RESPONSE_STYLE`
+- response-language preference
+
+Secrets are kept completely separate in the OS credential store.
 
 ## Security boundary
 
-The frontend has no generic shell or executable permission.
+Stage 1/2 boundaries remain unchanged.
 
-The Tauri capability grants only:
+Forbidden paths remain:
+
+```text
+frontend → arbitrary shell
+frontend → arbitrary executable
+LLM → shell
+LLM → OS adapter
+model output → exec()
+```
+
+The frontend capability grants:
 
 ```text
 core:default
+store:default
 ```
 
-It does **not** grant frontend `shell:allow-execute` or `shell:allow-spawn`.
+It does **not** grant frontend shell execute/spawn permissions.
 
-The only frontend bridge is:
+The only executable OS capability remains:
 
 ```text
-invoke("run_sor_keung", ...)
+open_app
 ```
 
-The Rust bridge itself chooses the fixed bundled `sor-keung-sidecar`. The frontend cannot supply an executable path.
+Actions still flow through:
 
-There is no:
+```text
+Jev
+→ typed ActionRequest
+→ validation
+→ dispatcher
+→ OS adapter
+```
 
-- `run_shell`
-- `run_arbitrary_shell_command`
-- frontend → arbitrary executable route
-- LLM → shell route
-- model-output → exec route
-
-Only the existing validated `open_app` pipeline can perform an OS action.
-
-### macOS open_app
-
-For packaged macOS execution the adapter uses the stable absolute system path:
+The macOS adapter continues to use:
 
 ```text
 /usr/bin/open
@@ -161,9 +225,9 @@ For packaged macOS execution the adapter uses the stable absolute system path:
 shell: false
 ```
 
-The application name remains a process argument, never concatenated shell syntax.
+No filesystem deletion, arbitrary shell, browser automation, or additional OS action has been added.
 
-## OpenRouter providers
+## Providers
 
 Decision layer:
 
@@ -179,9 +243,25 @@ LLM_PROVIDER=openrouter
 LLM_MODEL=openai/gpt-5.4-mini
 ```
 
-Both reuse the same session OpenRouter API key.
+The same securely stored OpenRouter credential is supplied to the bundled sidecar at runtime.
 
-## GitHub Actions macOS build
+## Current macOS packaging
+
+Key versions:
+
+- Tauri Rust crate: `2.11.6`
+- Tauri CLI: `2.11.5`
+- `@tauri-apps/api`: `2.11.1`
+- `tauri-plugin-shell`: `2.3.6`
+- Tauri Store plugin: `2.4.x`
+- Rust `keyring`: `4.2.0`
+- Node sidecar packager: `@yao-pkg/pkg 6.22.0`
+- sidecar target: `node24-macos-arm64`
+- Tauri target: `aarch64-apple-darwin`
+
+The end user does not need Node.js, npm, Rust, or Cargo installed.
+
+## Build and automated verification
 
 Workflow:
 
@@ -189,51 +269,36 @@ Workflow:
 .github/workflows/stage2-5-macos-build.yml
 ```
 
-It supports `workflow_dispatch` and also verifies pushes to the Stage 2.5 feature branch.
+The file name is retained from the earlier stage, but its workflow is now **Stage 3 macOS build** and targets `feature/stage-3-desktop-ui`.
 
-The workflow performs:
+It runs:
 
 ```text
 checkout
 → Node 24
 → Rust stable / aarch64-apple-darwin
 → npm install
-→ Tauri icon generation
+→ icon generation
 → TypeScript typecheck
-→ full automated tests
-→ @yao-pkg/pkg arm64 sidecar build
+→ full TypeScript tests
+→ Node sidecar build
 → sidecar architecture + codesign verification
+→ frontend build
+→ Rust credential/bridge tests
 → Tauri app + DMG build
-→ upload ordinary Actions artifacts
+→ macOS launch-metadata verification
+→ direct-run app packaging
+→ artifact upload
 ```
 
-No OpenRouter credential is needed to build.
+No real OpenRouter API key or Apple Developer credential is needed in CI.
 
-No Apple Developer credentials are needed at this stage.
-
-### Verified build result
-
-The Stage 2.5 workflow has successfully produced:
-
-```text
-Sor-Keung.app
-Sor-Keung_0.2.5_aarch64.dmg
-```
-
-Uploaded artifact names:
-
-```text
-Sor-Keung-direct-app-aarch64-apple-darwin
-Sor-Keung-dmg-aarch64-apple-darwin
-```
-
-The direct-run app artifact contains a `Sor-Keung.app.zip` created with macOS `ditto --keepParent`, preserving the complete `.app` bundle structure rather than exposing its internal `Contents/` directory.
-
-Latest fully verified Stage 2.5 build run (#12) reported:
+Verified Stage 3 implementation run:
 
 ```text
 TypeScript typecheck: PASS
-Tests: 41 passed, 0 failed
+TypeScript tests: 52 passed / 0 failed
+Rust credential/bridge tests: 2 passed / 0 failed
 Node sidecar: Mach-O 64-bit executable arm64
 Sidecar codesign verification: PASS
 Tauri .app build: PASS
@@ -242,19 +307,28 @@ Direct-run app packaging: PASS
 Artifact uploads: PASS
 ```
 
-## Signing / Gatekeeper
+Artifacts:
 
-This internal test build uses macOS **ad-hoc signing**:
+```text
+Sor-Keung-direct-app-aarch64-apple-darwin
+Sor-Keung-dmg-aarch64-apple-darwin
+```
+
+The direct-run artifact contains a complete `Sor-Keung.app.zip`.
+
+## Signing and enterprise-managed Mac note
+
+Internal builds remain **ad-hoc signed**:
 
 ```text
 signingIdentity: "-"
 ```
 
-This is not Developer ID signing and the app is not notarized.
+They are not Developer ID signed or notarized.
 
-When downloading the test app from GitHub, macOS Gatekeeper may therefore block or translocate the first launch. This was reproduced during physical acceptance on a corporate-managed macOS 27 Golden Gate machine: the downloaded ad-hoc-signed app could remain stuck before Rust/Tauri `main()` at `_dyld_start`.
+Stage 2.5 physical acceptance established that, on the current enterprise-managed macOS 27 Golden Gate Mac, a downloaded ad-hoc build may be held before application startup at `_dyld_start`.
 
-For this internal Stage 2.5 test package, the successful workaround was to create a fresh local copy without the downloaded extended attributes and then apply a fresh local ad-hoc signature:
+The successful development-only workaround was:
 
 ```bash
 cp -R -X ~/Applications/Sor-Keung.app ~/Applications/Sor-Keung-Local.app
@@ -263,110 +337,89 @@ codesign --verify --deep --strict --verbose=2 ~/Applications/Sor-Keung-Local.app
 open ~/Applications/Sor-Keung-Local.app
 ```
 
-This workaround does not disable Gatekeeper and does not require `sudo`. It is a development-only workaround, not a distribution solution.
+This does not disable Gatekeeper and does not require `sudo`.
 
-Official Developer ID signing and notarization are intentionally deferred until Sor-Keung is ready for external distribution. A future public build should use Developer ID signing and notarization rather than requiring local re-signing.
+**Stage 3 does not claim to solve the enterprise macOS execution restriction.** The same workaround may still be required for physical acceptance.
 
-## Download the M1 test build
+A future public build should use proper Developer ID signing and notarization rather than local re-signing.
 
-From GitHub:
+## Physical Mac acceptance — pending
 
-1. Open this repository.
-2. Select **Actions**.
-3. Open **Stage 2.5 macOS build**.
-4. Open the latest successful run for `feature/stage-2-5-macos-test-app`.
-5. Scroll to **Artifacts**.
-6. Download **Sor-Keung-dmg-aarch64-apple-darwin**.
-7. Unzip the GitHub Actions artifact.
-8. Open `Sor-Keung_0.2.5_aarch64.dmg`.
-9. Copy/open Sor-Keung and, if Gatekeeper blocks it, approve it in **System Settings → Privacy & Security**.
+Stage 3 must be tested on the existing Apple Silicon Mac before it can be considered accepted for merge.
 
-The separate `Sor-Keung-direct-app-aarch64-apple-darwin` artifact is available for direct app-bundle testing without using the DMG.
+Test the downloaded Stage 3 artifact as follows:
 
-## Physical Mac acceptance
+1. **First launch**
+   - app opens normally (using the documented enterprise-Mac workaround if required)
+   - no-key state clearly directs the user to Settings
 
-Physical acceptance is **complete** for Stage 2.5 on Apple Silicon M1 / macOS 27 Golden Gate.
+2. **Secure API key**
+   - add the OpenRouter key in Settings
+   - quit Sor-Keung
+   - reopen it
+   - Settings still reports the key as configured
+   - the raw key is never displayed
 
-Observed results:
+3. **Default Cantonese style**
+   - ensure `香港口語廣東話` is selected
+   - ask: `解釋量子糾纏是甚麼`
+   - confirm natural Hong Kong Cantonese
 
-- no API key → clear `請輸入 OpenRouter API Key。` configuration error
-- `開 Calculator` → Calculator opened successfully
-- `Open Safari` → Safari opened successfully
-- `解釋量子糾纏是甚麼` → Jev routed to the LLM and returned a Hong Kong Traditional Chinese / spoken-Cantonese response
-- `Explain quantum entanglement simply.` → English LLM response
-- `開 ExampleNonexistentApp` → safe text response; no crash and no arbitrary execution
-- `刪除 Downloads 入面所有檔案` → no filesystem action and no arbitrary shell execution
+4. **Written Chinese style**
+   - switch to `香港繁體中文書面語`
+   - ask the same question
+   - confirm the response changes appropriately to Hong Kong written Traditional Chinese
 
-One physical acceptance session consumed approximately **US$0.0049** of OpenRouter usage. This is only an observed test-session cost; actual cost varies with model/provider pricing and request volume.
+5. **English follow-input**
+   - ask: `Explain quantum entanglement simply.`
+   - confirm an English response
 
-### Product language direction discovered during acceptance
+6. **Actions**
+   - `開 Spotify` → Spotify opens
+   - `Open Safari` → Safari opens
 
-The spoken-Cantonese style used in the Chinese LLM response was judged desirable for Sor-Keung's target audience rather than a regression.
+7. **Invalid app**
+   - confirm a safe response and no crash
 
-Future product direction:
+8. **Security**
+   - an unsupported dangerous computer instruction must not execute any filesystem or arbitrary shell action
 
-```text
-Response language:
-- follow input
-- Chinese
-- English
+Do not mark physical acceptance complete until these tests have been performed on the Mac.
 
-Chinese response style:
-- Spoken Cantonese / 香港口語廣東話 (default)
-- Written Traditional Chinese / 香港繁體中文書面語
-```
-
-The style selector is a future product setting and is **not implemented in Stage 2.5**. Stage 3 has not started.
-
-## Automated tests
-
-Run locally during development:
+## Running development checks
 
 ```bash
 npm install
 npm run typecheck
 npm test
+npm run build:sidecar
+npm run build:frontend
+cargo test --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
 ```
 
-The test suite uses mocks and does not spend OpenRouter credits.
+## Current non-goals
 
-It covers Stage 1/2 regression behaviour plus Stage 2.5:
+Stage 3 does **not** add:
 
-- action route preserved
-- LLM text-only route preserved
-- structured action / LLM / error responses
-- missing API key handling
-- frontend cannot invoke arbitrary binaries or shell
-- key is transported via child environment, not command-line arguments
-- key is not persisted by the frontend
-- Tauri capability does not expose shell execute/spawn
-- `/usr/bin/open` safe argument-array invocation
-
-## Current limitations / non-goals
-
-Stage 2.5 does not include:
-
-- official Apple notarization
-- Developer ID signing
-- App Store distribution
-- Intel or Universal macOS builds
-- Windows/Linux packaging
-- production chat/history UI
-- menu bar/system tray mode
-- settings system or Keychain integration
-- persistent API key
-- microphone, STT, TTS, Groq, Fish Audio
+- microphone / voice input / voice output
+- Groq / Whisper / Fish Audio / STT / TTS
 - wake word / always-listening
-- streaming LLM responses
-- persistent conversation memory
-- database/vector store
-- web/browser control
-- new OS actions or filesystem actions
-- arbitrary shell execution
-- autonomous agents
-- updater/auto-launch/installers for public distribution
+- menu-bar or system-tray mode
+- global hotkey / auto-start
+- extra OS actions
+- filesystem control
+- arbitrary shell
+- browser automation or web search
+- persistent conversation history
+- long-term memory / vector database
+- MCP / plugins / autonomous agents
+- scheduled tasks
+- auto-update
+- public release
+- Apple notarization / Developer ID signing
+- Windows build
 
-Stage 3 has **not** started.
+Stage 4 has **not** started.
 
 ## License
 
