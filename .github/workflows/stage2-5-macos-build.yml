@@ -2,6 +2,11 @@ name: Stage 3 macOS build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/stage-3-desktop-ui
+    paths:
+      - .github/final-stage3-ci-trigger
 
 permissions:
   contents: read
