@@ -1,0 +1,10 @@
+{
+  "app.name": "傻強",
+  "app.tagline": "廣東話優先、多語言桌面 AI 助手",
+  "input.placeholder": "輸入訊息…",
+  "settings.title": "設定",
+  "voice.input": "語音輸入",
+  "voice.output": "語音輸出",
+  "voice.optional": "語音功能可選用",
+  "actions.notImplemented": "這項系統操作尚未實作。"
+}
