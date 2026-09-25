@@ -9,4 +9,4 @@ export interface DecisionInput {
 
 export type DecisionResult =
   | { route: "action"; action: ActionRequest }
-  | { route: "llm"; prompt: string };
+  | { route: "unsupported"; reason?: string };
