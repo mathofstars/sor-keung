@@ -10,17 +10,36 @@ import type {
   LlmProvider
 } from "../src/providers/types";
 
-test("desktop wrapper preserves the existing open_app action pipeline", async () => {
+const spotify: ActionRequest = {
+  name: "open_app",
+  args: {
+    id: "bundle:com.spotify.client",
+    displayName: "Spotify",
+    platform: "macos",
+    bundleIdentifier: "com.spotify.client",
+    launchName: "Spotify"
+  }
+};
+
+const messages: ActionRequest = {
+  name: "open_app",
+  args: {
+    id: "bundle:com.apple.MobileSMS",
+    displayName: "Messages",
+    platform: "macos",
+    bundleIdentifier: "com.apple.MobileSMS",
+    launchName: "Messages"
+  }
+};
+
+test("desktop wrapper preserves the open_app action pipeline", async () => {
   const actions: ActionRequest[] = [];
   let llmCalls = 0;
 
   const decisionProvider: DecisionProvider = {
     id: "mock-decision",
     async decide() {
-      return {
-        route: "action",
-        action: { name: "open_app", args: { app: "Spotify" } }
-      };
+      return { route: "action", action: spotify };
     }
   };
 
@@ -56,19 +75,114 @@ test("desktop wrapper preserves the existing open_app action pipeline", async ()
     message: "✓ Spotify 已經幫你開咗。"
   });
   assert.equal(llmCalls, 0);
-  assert.deepEqual(actions, [
-    { name: "open_app", args: { app: "Spotify" } }
-  ]);
+  assert.deepEqual(actions, [spotify]);
 });
 
-test("written response style also affects Chinese action acknowledgement", async () => {
+test("selected-app policy blocks disabled installed app before adapter", async () => {
+  let adapterCalls = 0;
+
   const decisionProvider: DecisionProvider = {
     id: "mock-decision",
     async decide() {
+      return { route: "action", action: messages };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      adapterCalls += 1;
+      return { ok: true, code: "OK", messageKey: "actions.openedApp" };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    { input: "Open Messages", uiLanguage: "en-GB" },
+    {
+      decisionProvider,
+      llmProvider,
+      actionAdapter,
+      appAccessPolicy: {
+        allowAllInstalledApps: false,
+        allowedAppIds: []
+      }
+    }
+  );
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: "error",
+    message: "This application is not allowed to open: Messages"
+  });
+  assert.equal(adapterCalls, 0);
+});
+
+test("selected-app policy permits explicitly enabled installed app", async () => {
+  const actions: ActionRequest[] = [];
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: messages };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute(request) {
+      actions.push(request);
       return {
-        route: "action",
-        action: { name: "open_app", args: { app: "Safari" } }
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "Messages" }
       };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    { input: "Open Messages", uiLanguage: "en-GB" },
+    {
+      decisionProvider,
+      llmProvider,
+      actionAdapter,
+      appAccessPolicy: {
+        allowAllInstalledApps: false,
+        allowedAppIds: ["bundle:com.apple.MobileSMS"]
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(actions, [messages]);
+});
+
+test("written response style also affects Chinese action acknowledgement", async () => {
+  const safari: ActionRequest = {
+    name: "open_app",
+    args: {
+      id: "bundle:com.apple.Safari",
+      displayName: "Safari",
+      platform: "macos",
+      bundleIdentifier: "com.apple.Safari",
+      launchName: "Safari"
+    }
+  };
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: safari };
     }
   };
   const llmProvider: LlmProvider = {
@@ -145,13 +259,18 @@ test("desktop wrapper preserves the existing LLM text-only route", async () => {
   assert.equal(responseStyle, "cantonese-hk");
 });
 
-test("action failures become structured error results", async () => {
+test("safe app-resolution failures become structured error results", async () => {
   const decisionProvider: DecisionProvider = {
     id: "mock-decision",
     async decide() {
       return {
-        route: "action",
-        action: { name: "open_app", args: { app: "ExampleApp" } }
+        route: "action_error",
+        result: {
+          ok: false,
+          code: "APP_NOT_FOUND",
+          messageKey: "actions.appNotFound",
+          data: { app: "ExampleApp" }
+        }
       };
     }
   };
@@ -166,12 +285,7 @@ test("action failures become structured error results", async () => {
   const actionAdapter: ActionAdapter = {
     platform: "macos",
     async execute() {
-      return {
-        ok: false,
-        code: "APP_NOT_FOUND",
-        messageKey: "actions.appNotFound",
-        data: { app: "ExampleApp" }
-      };
+      throw new Error("must not run");
     }
   };
 
