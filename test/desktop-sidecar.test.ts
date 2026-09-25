@@ -342,3 +342,148 @@ test("invalid empty request fails safely", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.kind, "error");
 });
+
+test("English open-app request gets English action response even with zh-HK UI", async () => {
+  const calculator: ActionRequest = {
+    name: "open_app",
+    args: {
+      id: "bundle:com.apple.calculator",
+      displayName: "Calculator",
+      platform: "macos",
+      bundleIdentifier: "com.apple.calculator",
+      launchName: "Calculator"
+    }
+  };
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: calculator };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      return {
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "Calculator" }
+      };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "Open Calculator",
+      uiLanguage: "zh-HK",
+      responseLanguageMode: "follow-input"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.deepEqual(result, {
+    ok: true,
+    kind: "action",
+    message: "Calculator opened."
+  });
+});
+
+test("Chinese open-app request gets configured Chinese action style even with English UI", async () => {
+  const calculator: ActionRequest = {
+    name: "open_app",
+    args: {
+      id: "bundle:com.apple.calculator",
+      displayName: "Calculator",
+      platform: "macos",
+      bundleIdentifier: "com.apple.calculator",
+      launchName: "Calculator"
+    }
+  };
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: calculator };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      return {
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "Calculator" }
+      };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "開 Calculator",
+      uiLanguage: "en-GB",
+      responseLanguageMode: "follow-input",
+      responseStyle: "cantonese-hk"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.deepEqual(result, {
+    ok: true,
+    kind: "action",
+    message: "✓ Calculator 已經幫你開咗。"
+  });
+});
+
+test("written-zh-hk reaches LLM provider at request time", async () => {
+  let seenStyle = "";
+  let seenInputLanguage = "";
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "llm" };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate(request) {
+      seenStyle = request.responseStyle ?? "";
+      seenInputLanguage = request.inputLanguage ?? "";
+      return { text: "量子糾纏是一種量子力學現象。" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      throw new Error("must not run");
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "解釋量子糾纏是甚麼",
+      uiLanguage: "zh-HK",
+      responseLanguageMode: "follow-input",
+      responseStyle: "written-zh-hk"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(seenStyle, "written-zh-hk");
+  assert.equal(seenInputLanguage, "yue-HK");
+});
