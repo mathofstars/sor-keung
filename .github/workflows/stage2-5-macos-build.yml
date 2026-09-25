@@ -1,10 +1,10 @@
-name: Stage 2.5 macOS build
+name: Stage 3 macOS build
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/stage-2-5-macos-test-app
+      - feature/stage-3-desktop-ui
 
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
       - name: TypeScript typecheck
         run: npm run typecheck
 
-      - name: Full automated test suite
+      - name: Full TypeScript automated test suite
         run: npm test
 
       - name: Build Apple Silicon Node sidecar
@@ -47,6 +47,9 @@ jobs:
           file src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
           codesign --verify --verbose=2 src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
 
+      - name: Rust credential and bridge tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
+
       - name: Build Tauri app and DMG
         uses: tauri-apps/tauri-action@v1
         env:
@@ -54,9 +57,17 @@ jobs:
         with:
           args: --target aarch64-apple-darwin --bundles app,dmg
 
+      - name: Verify macOS launch metadata
+        run: |
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app"
+          test "$(plutil -extract LSRequiresCarbon raw "$APP/Contents/Info.plist")" = "false"
+          plutil -p "$APP/Contents/Info.plist" | grep -E 'LSRequiresCarbon|CFBundleExecutable|CFBundleIdentifier'
+
       - name: Package direct-run app bundle
         run: |
-          ditto -c -k --sequesterRsrc --keepParent             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip
+          ditto -c -k --sequesterRsrc --keepParent \
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app \
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip
           unzip -l src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip | head -30
 
       - name: Upload direct-run Sor-Keung app
