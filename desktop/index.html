@@ -6,41 +6,101 @@
     <title>Sor-Keung 傻強</title>
   </head>
   <body>
-    <main class="shell">
-      <header>
-        <h1>Sor-Keung 傻強</h1>
-        <p>Stage 2.5 macOS 測試版</p>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1 id="app-brand">Sor-Keung 傻強</h1>
+          <p id="app-tagline">廣東話優先、多語言桌面 AI 助手</p>
+        </div>
+        <button id="settings-button" class="secondary-button" type="button">
+          ⚙︎ <span id="settings-button-label">設定</span>
+        </button>
       </header>
 
-      <form id="request-form">
-        <label for="api-key">OpenRouter API Key</label>
-        <input
-          id="api-key"
-          name="api-key"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="sk-or-…"
-        />
-        <p class="hint">只保留於本次應用程式工作階段，不會寫入設定或儲存。</p>
+      <main>
+        <section id="chat-view" class="view" aria-labelledby="app-brand">
+          <div id="missing-key-notice" class="notice" hidden>
+            <p id="missing-key-message"></p>
+            <button id="missing-key-settings-button" type="button"></button>
+          </div>
 
-        <label for="request-input">指令 / 問題</label>
-        <input
-          id="request-input"
-          name="request-input"
-          type="text"
-          autocomplete="off"
-          placeholder="例如：開 Spotify"
-        />
+          <div id="transcript" class="transcript" aria-live="polite">
+            <p id="empty-chat" class="empty-chat">有咩可以幫到你？</p>
+          </div>
 
-        <button id="send-button" type="submit">送出</button>
-      </form>
+          <form id="request-form" class="composer">
+            <label class="sr-only" for="request-input" id="request-label">輸入訊息</label>
+            <textarea
+              id="request-input"
+              name="request-input"
+              rows="2"
+              autocomplete="off"
+              placeholder="輸入訊息…"
+            ></textarea>
+            <button id="send-button" type="submit">送出</button>
+          </form>
+          <p id="processing-status" class="processing-status" aria-live="polite"></p>
+        </section>
 
-      <section class="response-panel" aria-labelledby="response-title">
-        <h2 id="response-title">回應</h2>
-        <p id="status" class="status idle" aria-live="polite">等待輸入。</p>
-      </section>
-    </main>
+        <section id="settings-view" class="view settings-view" hidden aria-labelledby="settings-title">
+          <div class="settings-heading">
+            <button id="settings-back-button" class="secondary-button" type="button">← 返回對話</button>
+            <h2 id="settings-title">設定</h2>
+          </div>
+
+          <section class="settings-card" aria-labelledby="api-settings-title">
+            <h3 id="api-settings-title">API</h3>
+            <div class="setting-row">
+              <div>
+                <strong id="api-key-label">OpenRouter API Key</strong>
+                <p id="api-key-status" class="setting-help"></p>
+              </div>
+            </div>
+            <label class="sr-only" id="api-key-input-label" for="api-key-input">OpenRouter API Key</label>
+            <input
+              id="api-key-input"
+              type="password"
+              autocomplete="new-password"
+              spellcheck="false"
+              placeholder="輸入新的 OpenRouter API Key"
+            />
+            <div class="button-row">
+              <button id="api-key-save-button" type="button">加入 / 取代 Key</button>
+              <button id="api-key-remove-button" class="danger-button" type="button">移除 Key</button>
+            </div>
+            <p id="api-key-operation-status" class="setting-help" aria-live="polite"></p>
+          </section>
+
+          <section class="settings-card" aria-labelledby="preferences-title">
+            <h3 id="preferences-title">偏好設定</h3>
+
+            <label for="ui-language-select" id="ui-language-label">介面語言</label>
+            <select id="ui-language-select">
+              <option value="zh-HK" id="ui-language-zh">繁體中文（香港）</option>
+              <option value="en-GB" id="ui-language-en">English</option>
+            </select>
+
+            <label for="response-style-select" id="response-style-label">中文回應風格</label>
+            <select id="response-style-select">
+              <option value="cantonese-hk" id="response-style-cantonese">香港口語廣東話</option>
+              <option value="written-zh-hk" id="response-style-written">香港繁體中文書面語</option>
+            </select>
+
+            <label for="response-language-select" id="response-language-label">回應語言</label>
+            <select id="response-language-select">
+              <option value="follow-input" id="response-language-follow">跟隨輸入語言</option>
+              <option value="fixed-zh-HK" id="response-language-zh">繁體中文（香港）</option>
+              <option value="fixed-en-GB" id="response-language-en">English</option>
+            </select>
+
+            <div class="button-row">
+              <button id="preferences-save-button" type="button">儲存設定</button>
+            </div>
+            <p id="preferences-status" class="setting-help" aria-live="polite"></p>
+          </section>
+        </section>
+      </main>
+    </div>
 
     <script type="module" src="/main.ts"></script>
   </body>
