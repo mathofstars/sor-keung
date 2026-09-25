@@ -7,8 +7,9 @@ Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assist
 **Stage 2.5 — macOS Apple Silicon test package**
 
 - **BUILD VERIFIED**
-- **PHYSICAL MAC ACCEPTANCE PENDING**
+- **PHYSICAL MAC ACCEPTANCE PASSED**
 - Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
+- Physical acceptance completed on an Apple Silicon M1 Mac running macOS 27 Golden Gate in a corporate-managed environment.
 - This is a development/testing package, not a notarized public release.
 
 Stage 2.5 wraps the existing Stage 2 TypeScript/Node.js core in a minimal Tauri v2 desktop shell. The Sor-Keung brain remains the source of truth; it has not been rewritten in Rust or moved into the webview.
@@ -222,11 +223,13 @@ Sor-Keung_0.2.5_aarch64.dmg
 Uploaded artifact names:
 
 ```text
-Sor-Keung-app-aarch64-apple-darwin
+Sor-Keung-direct-app-aarch64-apple-darwin
 Sor-Keung-dmg-aarch64-apple-darwin
 ```
 
-A verified run reported:
+The direct-run app artifact contains a `Sor-Keung.app.zip` created with macOS `ditto --keepParent`, preserving the complete `.app` bundle structure rather than exposing its internal `Contents/` directory.
+
+Latest fully verified Stage 2.5 build run (#12) reported:
 
 ```text
 TypeScript typecheck: PASS
@@ -235,6 +238,7 @@ Node sidecar: Mach-O 64-bit executable arm64
 Sidecar codesign verification: PASS
 Tauri .app build: PASS
 Tauri .dmg build: PASS
+Direct-run app packaging: PASS
 Artifact uploads: PASS
 ```
 
@@ -248,9 +252,20 @@ signingIdentity: "-"
 
 This is not Developer ID signing and the app is not notarized.
 
-When downloading the test app from GitHub, macOS Gatekeeper may therefore block the first launch. If that happens, use macOS **System Settings → Privacy & Security** to explicitly approve/open the app.
+When downloading the test app from GitHub, macOS Gatekeeper may therefore block or translocate the first launch. This was reproduced during physical acceptance on a corporate-managed macOS 27 Golden Gate machine: the downloaded ad-hoc-signed app could remain stuck before Rust/Tauri `main()` at `_dyld_start`.
 
-Official Developer ID signing and notarization are intentionally deferred until Sor-Keung is ready for external distribution.
+For this internal Stage 2.5 test package, the successful workaround was to create a fresh local copy without the downloaded extended attributes and then apply a fresh local ad-hoc signature:
+
+```bash
+cp -R -X ~/Applications/Sor-Keung.app ~/Applications/Sor-Keung-Local.app
+codesign --force --deep --sign - ~/Applications/Sor-Keung-Local.app
+codesign --verify --deep --strict --verbose=2 ~/Applications/Sor-Keung-Local.app
+open ~/Applications/Sor-Keung-Local.app
+```
+
+This workaround does not disable Gatekeeper and does not require `sudo`. It is a development-only workaround, not a distribution solution.
+
+Official Developer ID signing and notarization are intentionally deferred until Sor-Keung is ready for external distribution. A future public build should use Developer ID signing and notarization rather than requiring local re-signing.
 
 ## Download the M1 test build
 
@@ -266,67 +281,42 @@ From GitHub:
 8. Open `Sor-Keung_0.2.5_aarch64.dmg`.
 9. Copy/open Sor-Keung and, if Gatekeeper blocks it, approve it in **System Settings → Privacy & Security**.
 
-The separate `Sor-Keung-app-aarch64-apple-darwin` artifact is also available for direct app-bundle testing.
+The separate `Sor-Keung-direct-app-aarch64-apple-darwin` artifact is available for direct app-bundle testing without using the DMG.
 
-## Physical Mac acceptance plan
+## Physical Mac acceptance
 
-Physical acceptance is **not complete** until the downloaded artifact is tested on the Apple Silicon Mac.
+Physical acceptance is **complete** for Stage 2.5 on Apple Silicon M1 / macOS 27 Golden Gate.
 
-Test these cases:
+Observed results:
 
-### A. Cantonese action
+- no API key → clear `請輸入 OpenRouter API Key。` configuration error
+- `開 Calculator` → Calculator opened successfully
+- `Open Safari` → Safari opened successfully
+- `解釋量子糾纏是甚麼` → Jev routed to the LLM and returned a Hong Kong Traditional Chinese / spoken-Cantonese response
+- `Explain quantum entanglement simply.` → English LLM response
+- `開 ExampleNonexistentApp` → safe text response; no crash and no arbitrary execution
+- `刪除 Downloads 入面所有檔案` → no filesystem action and no arbitrary shell execution
 
-```text
-開 Spotify
-```
+One physical acceptance session consumed approximately **US$0.0049** of OpenRouter usage. This is only an observed test-session cost; actual cost varies with model/provider pricing and request volume.
 
-Expected: Spotify opens and Sor-Keung reports success.
+### Product language direction discovered during acceptance
 
-### B. English action
+The spoken-Cantonese style used in the Chinese LLM response was judged desirable for Sor-Keung's target audience rather than a regression.
 
-```text
-Open Safari
-```
-
-Expected: Safari opens.
-
-### C. Chinese LLM route
+Future product direction:
 
 ```text
-解釋量子糾纏是甚麼
+Response language:
+- follow input
+- Chinese
+- English
+
+Chinese response style:
+- Spoken Cantonese / 香港口語廣東話 (default)
+- Written Traditional Chinese / 香港繁體中文書面語
 ```
 
-Expected: Jev routes to the LLM and the answer is Hong Kong Traditional Chinese text.
-
-### D. English LLM route
-
-```text
-Explain quantum entanglement simply.
-```
-
-Expected: English text response.
-
-### E. Unknown app
-
-```text
-開 ExampleNonexistentApp
-```
-
-Expected: safe error; no crash.
-
-### F. Unsupported dangerous action
-
-```text
-刪除 Downloads 入面所有檔案
-```
-
-Expected: no filesystem action and no arbitrary shell execution.
-
-### G. No API key
-
-Launch the app without entering a key.
-
-Expected: clear configuration error; no crash.
+The style selector is a future product setting and is **not implemented in Stage 2.5**. Stage 3 has not started.
 
 ## Automated tests
 
