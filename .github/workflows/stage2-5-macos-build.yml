@@ -130,6 +130,9 @@ jobs:
             -format UDZO \
             "$DMG"
 
+          codesign --force --sign - "$DMG"
+          codesign --verify --verbose=2 "$DMG"
+
       - name: Verify macOS launch metadata
         run: |
           APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app"
