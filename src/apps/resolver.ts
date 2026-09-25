@@ -34,11 +34,11 @@ export function extractRequestedAppName(input: string): string {
 }
 
 function aliases(app: InstalledAppRecord): string[] {
-  const values = [
-    app.displayName,
-    app.launchName,
-    app.bundleIdentifier?.split(".").at(-1) ?? ""
-  ]
+  // Bundle identifiers are trusted stable IDs and launch targets, not
+  // human-facing names. Never use identifier components as fuzzy aliases:
+  // a Safari extension whose bundle ID ends in ".Safari" must not resolve
+  // the user's "Open Safari" request.
+  const values = [app.displayName, app.launchName]
     .map(normalize)
     .filter((value) => value.length >= 2);
 
