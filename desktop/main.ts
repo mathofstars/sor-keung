@@ -261,7 +261,7 @@ async function refreshInstalledApps(): Promise<void> {
 }
 
 function selectedInstalledAppIds(): string[] {
-  if (!installedAppsLoaded) {
+  if (allowAllInstalledApps.checked || !installedAppsLoaded) {
     return [...preferences.allowedAppIds];
   }
 
