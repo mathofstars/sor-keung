@@ -4,7 +4,7 @@ import { ActionDispatcher } from "./actions/dispatcher";
 import { MacOsActionAdapter } from "./actions/macos";
 import { WindowsActionAdapter } from "./actions/windows";
 import { SorKeungBrain } from "./brain/service";
-import { t, type SupportedUiLanguage } from "./i18n";
+import { t, type SupportedUiLanguage, type TranslationKey } from "./i18n";
 import { OpenRouterJevDecisionProvider } from "./providers/openrouter-jev";
 
 function getUiLanguage(): SupportedUiLanguage {
@@ -44,10 +44,12 @@ async function main(): Promise<void> {
         process.env.RESPONSE_LANGUAGE_MODE === "fixed" ? "fixed" : "follow-input"
     });
 
-    const app =
-      result.data && typeof result.data.app === "string" ? result.data.app : "";
+    const data = "data" in result ? result.data : undefined;
+    const app = data && typeof data.app === "string" ? data.app : "";
 
-    output.write(`${t(result.messageKey, locale, { app })}\n`);
+    output.write(
+      `${t(result.messageKey as TranslationKey, locale, { app })}\n`
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     output.write(`${t("error.runtime", locale, { message })}\n`);
