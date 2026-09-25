@@ -50,5 +50,13 @@
   "desktop.invalidRequest": "The input is invalid.",
   "desktop.sidecarFailure": "Sor-Keung could not process the request.",
   "desktop.aiServiceUnavailable": "Unable to connect to the AI service right now. Please try again later.",
-  "error.runtime": "Error: {message}"
+  "error.runtime": "Error: {message}",
+  "settings.appAccess": "App access",
+  "settings.allowAllInstalledApps": "Allow all installed applications",
+  "settings.appAccessHelp": "When off, Sor-Keung can open only the applications you explicitly enable below.",
+  "settings.appAccessLoading": "Loading installed applications…",
+  "settings.appAccessNone": "No installed applications were found.",
+  "settings.appAccessLoadError": "Unable to load the installed application list.",
+  "actions.appBlocked": "This application is not allowed to open: {app}",
+  "actions.appAmbiguous": "More than one installed application could match. Please specify which application to open: {app}"
 }
