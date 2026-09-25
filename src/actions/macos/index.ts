@@ -1,7 +1,10 @@
 import { execFile } from "node:child_process";
 import type { ActionAdapter, ActionRequest, ActionResult } from "../types";
 
-export type ProcessRunner = (executable: string, args: readonly string[]) => Promise<void>;
+export type ProcessRunner = (
+  executable: string,
+  args: readonly string[]
+) => Promise<void>;
 
 const MACOS_OPEN = "/usr/bin/open";
 
@@ -30,8 +33,8 @@ export class MacOsActionAdapter implements ActionAdapter {
       };
     }
 
-    const app = request.args.app.trim();
-    if (!app) {
+    const app = request.args;
+    if (app.platform !== "macos") {
       return {
         ok: false,
         code: "INVALID_ARGUMENT",
@@ -39,20 +42,30 @@ export class MacOsActionAdapter implements ActionAdapter {
       };
     }
 
+    const openArgs = app.bundleIdentifier
+      ? ["-b", app.bundleIdentifier]
+      : ["-a", app.launchName];
+
     try {
-      await this.runProcess(MACOS_OPEN, ["-a", app]);
+      await this.runProcess(MACOS_OPEN, openArgs);
       return {
         ok: true,
         code: "OK",
         messageKey: "actions.openedApp",
-        data: { app }
+        data: {
+          app: app.displayName,
+          appId: app.id
+        }
       };
     } catch {
       return {
         ok: false,
         code: "APP_NOT_FOUND",
         messageKey: "actions.appNotFound",
-        data: { app }
+        data: {
+          app: app.displayName,
+          appId: app.id
+        }
       };
     }
   }
