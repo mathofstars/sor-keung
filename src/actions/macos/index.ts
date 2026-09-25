@@ -3,6 +3,8 @@ import type { ActionAdapter, ActionRequest, ActionResult } from "../types";
 
 export type ProcessRunner = (executable: string, args: readonly string[]) => Promise<void>;
 
+const MACOS_OPEN = "/usr/bin/open";
+
 const defaultRunner: ProcessRunner = (executable, args) =>
   new Promise((resolve, reject) => {
     execFile(executable, [...args], { shell: false }, (error) => {
@@ -38,7 +40,7 @@ export class MacOsActionAdapter implements ActionAdapter {
     }
 
     try {
-      await this.runProcess("open", ["-a", app]);
+      await this.runProcess(MACOS_OPEN, ["-a", app]);
       return {
         ok: true,
         code: "OK",
