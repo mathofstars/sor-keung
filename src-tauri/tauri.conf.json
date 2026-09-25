@@ -8,15 +8,7 @@
     "frontendDist": "../desktop-dist"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Sor-Keung 傻強",
-        "width": 720,
-        "height": 620,
-        "resizable": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
