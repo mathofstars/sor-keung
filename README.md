@@ -30,10 +30,14 @@ Tauri frontend
           │
           ├─ API key status/save/delete → OS credential store
           │                               (macOS Keychain)
+          ├─ trusted installed-app catalogue
+          │   └─ local .app metadata / Info.plist
+          ├─ persisted App Access policy ← Tauri Store
           │
           └─ run_sor_keung(request)
                   │
                   ├─ retrieve API key from Keychain
+                  ├─ inject trusted app catalogue + policy
                   ├─ fixed bundled Node sidecar
                   └─ OPENROUTER_API_KEY in child environment only
                               │
@@ -43,11 +47,16 @@ Tauri frontend
                              Jev
                          ┌────┴────┐
                          ▼         ▼
-                      action      LLM
+                   open-app intent LLM
                          │         │
-                    validation  OpenRouter
-                         │         │
-                    dispatcher  text only
+                  AppCatalog     OpenRouter
+                    resolver       │
+                         │       text only
+                 typed open_app
+                         │
+                AppAccessPolicy
+                         │
+                    dispatcher
                          │
                     macOS adapter
 ```
@@ -123,6 +132,36 @@ Stage 3 retains:
 
 The default remains **Follow input language**.
 
+### App access
+
+Stage 3 now resolves applications from a trusted local installed-app catalogue instead of a permanent hard-coded list.
+
+Default:
+
+```text
+Allow all installed applications: ON
+```
+
+When ON, any application that resolves to one trusted local catalogue entry may be opened.
+
+When OFF, Settings displays the discovered installed applications and the user can enable or disable them individually. The persisted non-secret policy is conceptually:
+
+```text
+allowAllInstalledApps: true | false
+allowedAppIds: [...]
+```
+
+Stable bundle identifiers are preferred as app IDs where available. The frontend receives display metadata for Settings but does not receive or choose executable filesystem paths.
+
+The core abstractions are:
+
+```text
+AppCatalog
+AppAccessPolicy
+```
+
+They are platform-neutral so a later Windows catalogue can implement the same contract without changing Sor-Keung brain semantics. Stage 3 does **not** implement Windows discovery or launching.
+
 ## Secure OpenRouter API-key storage
 
 Stage 2.5 used session-only API-key entry. Stage 3 stores the OpenRouter credential using the Rust `keyring` 4.x OS-native credential abstraction.
@@ -135,6 +174,7 @@ Narrow Rust commands:
 has_api_key()
 save_api_key(secret)
 delete_api_key()
+list_installed_apps()
 run_sor_keung(request)
 ```
 
@@ -175,8 +215,12 @@ The official Tauri Store plugin persists only non-secret preferences:
 - `UI_LANGUAGE`
 - `RESPONSE_STYLE`
 - response-language preference
+- `allowAllInstalledApps`
+- `allowedAppIds`
 
 Secrets are kept completely separate in the OS credential store.
+
+The Rust bridge reads the persisted app-access policy itself before each chat request and injects it into the fixed sidecar together with the trusted catalogue. The JavaScript chat request cannot supply a replacement catalogue or policy.
 
 ## Security boundary
 
@@ -207,23 +251,45 @@ The only executable OS capability remains:
 open_app
 ```
 
-Actions still flow through:
+Open-app requests now flow through:
 
 ```text
 Jev
+→ generic open_app intent
+→ trusted local AppCatalog resolution
 → typed ActionRequest
 → validation
+→ AppAccessPolicy
 → dispatcher
 → OS adapter
 ```
 
-The macOS adapter continues to use:
+Jev no longer contains a permanent Spotify/Safari/Calculator catalogue. It only decides whether the user is clearly asking to open an application; deterministic local code resolves the requested name against the trusted installed-app catalogue.
+
+Resolution rules are deliberately fail-safe:
+
+- one confident installed-app match → continue
+- multiple plausible matches → report ambiguity and launch nothing
+- no installed-app match → report app not found
+- model/user text never becomes an executable path
+
+On macOS, the adapter prefers the resolved trusted bundle identifier:
 
 ```text
 /usr/bin/open
-["-a", appName]
+["-b", bundleIdentifier]
 shell: false
 ```
+
+If a discovered app has no bundle identifier, Sor-Keung may use its trusted canonical app name:
+
+```text
+/usr/bin/open
+["-a", canonicalAppName]
+shell: false
+```
+
+No shell command is concatenated.
 
 No filesystem deletion, arbitrary shell, browser automation, or additional OS action has been added.
 
@@ -255,6 +321,7 @@ Key versions:
 - `tauri-plugin-shell`: `2.3.6`
 - Tauri Store plugin: `2.4.x`
 - Rust `keyring`: `4.2.0`
+- Rust `plist`: `1.x` for local macOS app metadata
 - Node sidecar packager: `@yao-pkg/pkg 6.22.0`
 - sidecar target: `node24-macos-arm64`
 - Tauri target: `aarch64-apple-darwin`
@@ -297,8 +364,8 @@ Verified Stage 3 implementation run:
 
 ```text
 TypeScript typecheck: PASS
-TypeScript tests: 52 passed / 0 failed
-Rust credential/bridge tests: 2 passed / 0 failed
+TypeScript tests: 75 passed / 0 failed
+Rust credential/catalogue/bridge tests: 3 passed / 0 failed
 Node sidecar: Mach-O 64-bit executable arm64
 Sidecar codesign verification: PASS
 Tauri .app build: PASS
@@ -374,15 +441,29 @@ Test the downloaded Stage 3 artifact as follows:
    - ask: `Explain quantum entanglement simply.`
    - confirm an English response
 
-6. **Actions**
-   - `開 Spotify` → Spotify opens
+6. **Installed application catalogue — allow all**
+   - confirm **Allow all installed applications** defaults to ON
+   - `Open Messages` → Messages opens when installed
+   - `開 Calculator` → Calculator opens when installed
    - `Open Safari` → Safari opens
+   - `Open Preview` → Preview opens when installed
 
-7. **Invalid app**
-   - confirm a safe response and no crash
+7. **Selected-app-only policy**
+   - turn **Allow all installed applications** OFF
+   - confirm the installed-app list appears
+   - disable Messages and save Settings
+   - `Open Messages` must be blocked and Messages must not launch
+   - enable Messages and save Settings
+   - `Open Messages` should now succeed
+   - quit and reopen Sor-Keung and confirm the App Access setting persists
 
-8. **Security**
+8. **Invalid / ambiguous app**
+   - request a non-existent app and confirm a safe app-not-found response with no launch
+   - if two installed apps plausibly match a request, confirm Sor-Keung launches neither
+
+9. **Security**
    - an unsupported dangerous computer instruction must not execute any filesystem or arbitrary shell action
+   - app requests must never accept an executable path or model-generated command line
 
 Do not mark physical acceptance complete until these tests have been performed on the Mac.
 
