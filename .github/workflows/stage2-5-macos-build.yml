@@ -102,7 +102,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
 
           codesign -d --entitlements :- "$SIDE" 2>/dev/null > /tmp/sor-keung-sidecar-entitlements.plist
-          test "$(plutil -extract com.apple.security.cs.allow-jit raw /tmp/sor-keung-sidecar-entitlements.plist)" = "true"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.allow-jit' /tmp/sor-keung-sidecar-entitlements.plist)" = "true"
 
           # This reproduces the physical Tahoe failure mode without using any API key.
           OUTPUT="$(printf '' | "$SIDE")"
