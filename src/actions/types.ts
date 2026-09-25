@@ -21,7 +21,12 @@ export type ActionRequest =
 
 export interface ActionResult {
   ok: boolean;
-  code: "OK" | "NOT_IMPLEMENTED" | "UNSUPPORTED_ACTION" | "INVALID_ARGUMENT";
+  code:
+    | "OK"
+    | "NOT_IMPLEMENTED"
+    | "UNSUPPORTED_ACTION"
+    | "INVALID_ARGUMENT"
+    | "APP_NOT_FOUND";
   messageKey: string;
   data?: Record<string, unknown>;
 }

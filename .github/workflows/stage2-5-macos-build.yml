@@ -1,0 +1,74 @@
+name: Stage 2.5 macOS build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/stage-2-5-macos-test-app
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install JavaScript dependencies
+        run: npm install
+
+      - name: Generate Tauri iconset
+        run: npm run tauri icon app-icon.svg
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Full automated test suite
+        run: npm test
+
+      - name: Build Apple Silicon Node sidecar
+        run: npm run build:sidecar
+
+      - name: Verify sidecar architecture and signature
+        run: |
+          file src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
+          codesign --verify --verbose=2 src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
+
+      - name: Build Tauri app and DMG
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target aarch64-apple-darwin --bundles app,dmg
+
+      - name: Package direct-run app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip
+          unzip -l src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip | head -30
+
+      - name: Upload direct-run Sor-Keung app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sor-Keung-direct-app-aarch64-apple-darwin
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip
+          if-no-files-found: error
+
+      - name: Upload Sor-Keung DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sor-Keung-dmg-aarch64-apple-darwin
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

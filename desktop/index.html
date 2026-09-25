@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-HK">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sor-Keung 傻強</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <h1>Sor-Keung 傻強</h1>
+        <p>Stage 2.5 macOS 測試版</p>
+      </header>
+
+      <form id="request-form">
+        <label for="api-key">OpenRouter API Key</label>
+        <input
+          id="api-key"
+          name="api-key"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="sk-or-…"
+        />
+        <p class="hint">只保留於本次應用程式工作階段，不會寫入設定或儲存。</p>
+
+        <label for="request-input">指令 / 問題</label>
+        <input
+          id="request-input"
+          name="request-input"
+          type="text"
+          autocomplete="off"
+          placeholder="例如：開 Spotify"
+        />
+
+        <button id="send-button" type="submit">送出</button>
+      </form>
+
+      <section class="response-panel" aria-labelledby="response-title">
+        <h2 id="response-title">回應</h2>
+        <p id="status" class="status idle" aria-live="polite">等待輸入。</p>
+      </section>
+    </main>
+
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
