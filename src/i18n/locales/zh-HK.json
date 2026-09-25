@@ -6,5 +6,13 @@
   "voice.input": "語音輸入",
   "voice.output": "語音輸出",
   "voice.optional": "語音功能可選用",
-  "actions.notImplemented": "這項系統操作尚未實作。"
+  "cli.prompt": "輸入指令：",
+  "request.unsupported": "這項要求目前未支援。",
+  "actions.openedApp": "✓ 已開啟 {app}",
+  "actions.appNotFound": "無法開啟應用程式：{app}",
+  "actions.invalidApp": "應用程式名稱無效。",
+  "actions.unsupported": "這項系統操作目前未支援。",
+  "actions.notImplemented": "這項系統操作尚未實作。",
+  "platform.unsupported": "目前的作業系統尚未支援 Stage 1 動作執行。",
+  "error.runtime": "錯誤：{message}"
 }
