@@ -26,8 +26,11 @@ function responseStyleInstruction(
 ): string {
   if (responseStyle === "written-zh-hk") {
     return [
-      "When replying in Chinese, use normal Hong Kong Traditional Chinese written style.",
-      "Avoid Simplified Chinese and avoid heavily colloquial Cantonese wording."
+      "When replying in Chinese, use standard written Hong Kong Traditional Chinese.",
+      "Use standard written Chinese grammar and vocabulary, not conversational Cantonese.",
+      "Do not use Simplified Chinese.",
+      "Except when explicitly quoting or discussing Cantonese, avoid colloquial Cantonese forms such as 係、唔、佢、佢哋、點解、咁、嚟、嘅、喺、咗.",
+      "Use written forms such as 是、不、他／她／它、他們／她們／它們、為甚麼、那麼／因此、來、的、在、了 as appropriate."
     ].join(" ");
   }
 
