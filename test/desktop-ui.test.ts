@@ -51,3 +51,12 @@ test("assistant LLM responses use safe Markdown renderer while user messages sta
   assert.match(frontend, /text\.textContent = app\.displayName/);
   assert.doesNotMatch(frontend, /innerHTML/);
 });
+
+test("assistant Markdown presentation preserves line breaks", async () => {
+  const css = await readFile("desktop/style.css", "utf8");
+
+  assert.match(
+    css,
+    /\.message\.assistant \.message-body \{[\s\S]*?white-space: pre-wrap;/
+  );
+});
