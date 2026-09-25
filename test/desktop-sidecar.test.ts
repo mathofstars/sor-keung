@@ -584,3 +584,51 @@ test("Chinese Safari request follows input language with English UI", async () =
 
   assert.equal(result.message, "✓ Safari 已經幫你開咗。");
 });
+
+test("English open command stays English even when app display name contains Han characters", async () => {
+  const app: ActionRequest = {
+    name: "open_app",
+    args: {
+      id: "bundle:com.example.wechat",
+      displayName: "微信",
+      platform: "macos",
+      bundleIdentifier: "com.example.wechat",
+      launchName: "微信"
+    }
+  };
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: app };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      return {
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "微信" }
+      };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "Open 微信",
+      uiLanguage: "zh-HK",
+      responseLanguageMode: "follow-input"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.equal(result.message, "微信 opened.");
+});
