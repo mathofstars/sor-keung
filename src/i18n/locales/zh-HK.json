@@ -58,5 +58,7 @@
   "settings.appAccessNone": "找不到可用的已安裝應用程式。",
   "settings.appAccessLoadError": "未能讀取已安裝應用程式清單。",
   "actions.appBlocked": "這個應用程式未獲允許開啟：{app}",
-  "actions.appAmbiguous": "找到多個可能的應用程式，請指定要開啟哪一個：{app}"
+  "actions.appAmbiguous": "找到多個可能的應用程式，請指定要開啟哪一個：{app}",
+  "settings.loading": "正在載入已儲存設定…",
+  "settings.loadError": "未能讀取已儲存設定。請返回對話後再試。"
 }
