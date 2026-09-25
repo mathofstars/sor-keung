@@ -70,20 +70,6 @@ export function resolveInstalledApp(
   }
 
   if (phraseMatches.length > 1) {
-    const longest = phraseMatches
-      .map((app) => ({
-        app,
-        length: Math.max(...aliases(app).map((alias) => alias.length))
-      }))
-      .sort((a, b) => b.length - a.length);
-
-    if (
-      longest.length >= 2 &&
-      longest[0].length > longest[1].length
-    ) {
-      return { kind: "resolved", app: longest[0].app };
-    }
-
     return { kind: "ambiguous", query, matches: phraseMatches };
   }
 
