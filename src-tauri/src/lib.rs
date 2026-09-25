@@ -1,10 +1,18 @@
 use keyring::{Entry, Error as KeyringError};
+use plist::Value as PlistValue;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
+use tauri::{AppHandle, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::{
     process::CommandEvent,
     ShellExt,
 };
+use tauri_plugin_store::StoreExt;
 
 const SIDECAR_NAME: &str = "sor-keung-sidecar";
 const KEYRING_SERVICE: &str = "com.mathofstars.sor-keung";
@@ -73,6 +81,199 @@ fn delete_api_key_with(store: &impl CredentialStore) -> Result<(), String> {
     store.delete()
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct InstalledAppRecord {
+    id: String,
+    display_name: String,
+    platform: String,
+    bundle_identifier: Option<String>,
+    launch_name: String,
+}
+
+trait AppCatalog {
+    fn list(&self) -> Result<Vec<InstalledAppRecord>, String>;
+}
+
+#[derive(Default)]
+struct MacOsAppCatalog;
+
+fn plist_string<'a>(
+    dictionary: &'a plist::Dictionary,
+    key: &str,
+) -> Option<&'a str> {
+    dictionary.get(key).and_then(PlistValue::as_string)
+}
+
+fn record_from_app_bundle(path: &Path) -> Option<InstalledAppRecord> {
+    let launch_name = path.file_stem()?.to_string_lossy().trim().to_string();
+    if launch_name.is_empty() {
+        return None;
+    }
+
+    let info_path = path.join("Contents").join("Info.plist");
+    let value = PlistValue::from_file(info_path).ok()?;
+    let dictionary = value.as_dictionary()?;
+
+    let bundle_identifier = plist_string(dictionary, "CFBundleIdentifier")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    let display_name = plist_string(dictionary, "CFBundleDisplayName")
+        .or_else(|| plist_string(dictionary, "CFBundleName"))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&launch_name)
+        .to_string();
+
+    let id = bundle_identifier
+        .as_ref()
+        .map(|bundle| format!("bundle:{bundle}"))
+        .unwrap_or_else(|| format!("name:{}", launch_name.to_lowercase()));
+
+    Some(InstalledAppRecord {
+        id,
+        display_name,
+        platform: "macos".into(),
+        bundle_identifier,
+        launch_name,
+    })
+}
+
+fn scan_app_root(
+    root: &Path,
+    depth: usize,
+    records: &mut BTreeMap<String, InstalledAppRecord>,
+) {
+    if depth == 0 || !root.is_dir() {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let is_app = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.eq_ignore_ascii_case("app"))
+            .unwrap_or(false);
+
+        if is_app {
+            if let Some(record) = record_from_app_bundle(&path) {
+                records.entry(record.id.clone()).or_insert(record);
+            }
+            continue;
+        }
+
+        scan_app_root(&path, depth - 1, records);
+    }
+}
+
+impl AppCatalog for MacOsAppCatalog {
+    fn list(&self) -> Result<Vec<InstalledAppRecord>, String> {
+        let mut records = BTreeMap::new();
+        let mut roots = Vec::<PathBuf>::new();
+
+        if let Some(home) = std::env::var_os("HOME") {
+            roots.push(PathBuf::from(home).join("Applications"));
+        }
+
+        roots.extend([
+            PathBuf::from("/Applications"),
+            PathBuf::from("/System/Applications"),
+            PathBuf::from("/System/Library/CoreServices/Applications"),
+        ]);
+
+        for root in roots {
+            scan_app_root(&root, 4, &mut records);
+        }
+
+        let mut apps: Vec<_> = records.into_values().collect();
+        apps.sort_by(|left, right| {
+            left.display_name
+                .to_lowercase()
+                .cmp(&right.display_name.to_lowercase())
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        Ok(apps)
+    }
+}
+
+#[derive(Default)]
+struct AppCatalogState {
+    cached: Mutex<Option<Vec<InstalledAppRecord>>>,
+}
+
+impl AppCatalogState {
+    fn list(&self) -> Result<Vec<InstalledAppRecord>, String> {
+        let mut cached = self
+            .cached
+            .lock()
+            .map_err(|_| "Installed application catalogue is unavailable.".to_string())?;
+
+        if let Some(apps) = cached.as_ref() {
+            return Ok(apps.clone());
+        }
+
+        let apps = MacOsAppCatalog.list()?;
+        *cached = Some(apps.clone());
+        Ok(apps)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppAccessPolicyWire {
+    allow_all_installed_apps: bool,
+    allowed_app_ids: Vec<String>,
+}
+
+impl Default for AppAccessPolicyWire {
+    fn default() -> Self {
+        Self {
+            allow_all_installed_apps: true,
+            allowed_app_ids: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredPreferences {
+    allow_all_installed_apps: Option<bool>,
+    allowed_app_ids: Option<Vec<String>>,
+}
+
+fn load_app_access_policy(app: &AppHandle) -> AppAccessPolicyWire {
+    let Ok(store) = app.store("settings.json") else {
+        return AppAccessPolicyWire::default();
+    };
+
+    let Some(value) = store.get("preferences") else {
+        return AppAccessPolicyWire::default();
+    };
+
+    let Ok(preferences) = serde_json::from_value::<StoredPreferences>(value) else {
+        return AppAccessPolicyWire::default();
+    };
+
+    AppAccessPolicyWire {
+        allow_all_installed_apps: preferences.allow_all_installed_apps.unwrap_or(true),
+        allowed_app_ids: preferences.allowed_app_ids.unwrap_or_default(),
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SidecarRequest {
@@ -82,6 +283,8 @@ struct SidecarRequest {
     output_language: Option<String>,
     response_language_mode: Option<String>,
     response_style: Option<String>,
+    installed_apps: Option<Vec<InstalledAppRecord>>,
+    app_access_policy: Option<AppAccessPolicyWire>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -135,9 +338,17 @@ fn delete_api_key() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn list_installed_apps(
+    state: State<'_, AppCatalogState>,
+) -> Result<Vec<InstalledAppRecord>, String> {
+    state.list()
+}
+
+#[tauri::command]
 async fn run_sor_keung(
     app: AppHandle,
-    request: SidecarRequest,
+    state: State<'_, AppCatalogState>,
+    mut request: SidecarRequest,
 ) -> Result<SidecarResponse, String> {
     let ui_language = request.ui_language.as_deref();
     let api_key = match KeyringCredentialStore.load() {
@@ -145,6 +356,9 @@ async fn run_sor_keung(
         Ok(_) => return Ok(configuration_error(ui_language)),
         Err(_) => return Ok(bridge_error(ui_language)),
     };
+
+    request.installed_apps = Some(state.list()?);
+    request.app_access_policy = Some(load_app_access_policy(&app));
 
     let mut stdin_payload =
         serde_json::to_vec(&request).map_err(|_| "Invalid Sor-Keung request.".to_string())?;
@@ -195,6 +409,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .manage(AppCatalogState::default())
         .setup(|app| {
             WebviewWindowBuilder::new(
                 app,
@@ -213,6 +428,7 @@ pub fn run() {
             has_api_key,
             save_api_key,
             delete_api_key,
+            list_installed_apps,
             run_sor_keung
         ])
         .run(tauri::generate_context!())
@@ -265,5 +481,11 @@ mod tests {
         let store = MemoryCredentialStore::default();
         assert!(save_api_key_with(&store, "   ").is_err());
         assert!(!has_api_key_with(&store).unwrap());
+    }
+
+    #[test]
+    fn app_access_policy_defaults_to_allow_all() {
+        assert!(AppAccessPolicyWire::default().allow_all_installed_apps);
+        assert!(AppAccessPolicyWire::default().allowed_app_ids.is_empty());
     }
 }
