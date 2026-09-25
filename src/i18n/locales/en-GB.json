@@ -6,5 +6,13 @@
   "voice.input": "Voice input",
   "voice.output": "Voice output",
   "voice.optional": "Voice features are optional",
-  "actions.notImplemented": "This system action is not implemented yet."
+  "cli.prompt": "Enter command: ",
+  "request.unsupported": "This request is not supported yet.",
+  "actions.openedApp": "✓ Opened {app}",
+  "actions.appNotFound": "Unable to open application: {app}",
+  "actions.invalidApp": "Invalid application name.",
+  "actions.unsupported": "This system action is not supported yet.",
+  "actions.notImplemented": "This system action is not implemented yet.",
+  "platform.unsupported": "This operating system does not support Stage 1 action execution yet.",
+  "error.runtime": "Error: {message}"
 }
