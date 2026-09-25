@@ -1,0 +1,10 @@
+{
+  "app.name": "Sor-Keung",
+  "app.tagline": "Cantonese-first, multilingual desktop AI assistant",
+  "input.placeholder": "Type a message…",
+  "settings.title": "Settings",
+  "voice.input": "Voice input",
+  "voice.output": "Voice output",
+  "voice.optional": "Voice features are optional",
+  "actions.notImplemented": "This system action is not implemented yet."
+}
