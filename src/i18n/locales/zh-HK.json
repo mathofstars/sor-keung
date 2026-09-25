@@ -14,5 +14,8 @@
   "actions.unsupported": "這項系統操作目前未支援。",
   "actions.notImplemented": "這項系統操作尚未實作。",
   "platform.unsupported": "目前的作業系統尚未支援 Stage 1 動作執行。",
+  "desktop.missingApiKey": "請輸入 OpenRouter API Key。",
+  "desktop.invalidRequest": "輸入內容無效。",
+  "desktop.sidecarFailure": "Sor-Keung 處理要求時發生錯誤。",
   "error.runtime": "錯誤：{message}"
 }
