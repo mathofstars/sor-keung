@@ -2,6 +2,7 @@ import { ActionDispatcher } from "./actions/dispatcher";
 import { MacOsActionAdapter } from "./actions/macos";
 import type { ActionAdapter } from "./actions/types";
 import { SorKeungBrain } from "./brain/service";
+import type { ResponseStyle } from "./brain/types";
 import { t, type SupportedUiLanguage, type TranslationKey } from "./i18n";
 import { OpenRouterJevDecisionProvider } from "./providers/openrouter-jev";
 import { OpenRouterLlmProvider } from "./providers/openrouter-llm";
@@ -13,6 +14,7 @@ export interface DesktopSidecarRequest {
   inputLanguage?: string;
   outputLanguage?: string;
   responseLanguageMode?: "follow-input" | "fixed";
+  responseStyle?: ResponseStyle;
 }
 
 export interface DesktopSidecarResponse {
@@ -31,21 +33,20 @@ function localeFor(request: DesktopSidecarRequest): SupportedUiLanguage {
   return request.uiLanguage === "en-GB" ? "en-GB" : "zh-HK";
 }
 
-function safeMessage(
-  error: unknown,
+function actionMessageKey(
+  resultKey: string,
   locale: SupportedUiLanguage,
-  secrets: readonly string[] = []
-): string {
-  const message = error instanceof Error ? error.message : "";
-  const containsSecret = secrets.some(
-    (secret) => secret.length > 0 && message.includes(secret)
-  );
-
-  if (!message || containsSecret) {
-    return t("desktop.sidecarFailure", locale);
+  responseStyle: ResponseStyle
+): TranslationKey {
+  if (
+    resultKey === "actions.openedApp" &&
+    locale === "zh-HK" &&
+    responseStyle === "cantonese-hk"
+  ) {
+    return "actions.openedAppCantonese";
   }
 
-  return message;
+  return resultKey as TranslationKey;
 }
 
 export async function handleDesktopSidecarRequest(
@@ -54,6 +55,7 @@ export async function handleDesktopSidecarRequest(
 ): Promise<DesktopSidecarResponse> {
   const locale = localeFor(request);
   const input = request.input?.trim();
+  const responseStyle = request.responseStyle ?? "cantonese-hk";
 
   if (!input) {
     return {
@@ -74,7 +76,8 @@ export async function handleDesktopSidecarRequest(
       text: input,
       inputLanguage: request.inputLanguage ?? "yue-HK",
       outputLanguage: request.outputLanguage ?? "yue-HK",
-      responseLanguageMode: request.responseLanguageMode ?? "follow-input"
+      responseLanguageMode: request.responseLanguageMode ?? "follow-input",
+      responseStyle
     });
 
     if (response.kind === "text") {
@@ -88,18 +91,22 @@ export async function handleDesktopSidecarRequest(
     const result = response.result;
     const app =
       result.data && typeof result.data.app === "string" ? result.data.app : "";
-    const message = t(result.messageKey as TranslationKey, locale, { app });
+    const message = t(
+      actionMessageKey(result.messageKey, locale, responseStyle),
+      locale,
+      { app }
+    );
 
     if (!result.ok) {
       return { ok: false, kind: "error", message };
     }
 
     return { ok: true, kind: "action", message };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       kind: "error",
-      message: safeMessage(error, locale)
+      message: t("desktop.aiServiceUnavailable", locale)
     };
   }
 }
@@ -139,11 +146,11 @@ export async function handleDesktopSidecarRequestFromEnvironment(
       }),
       actionAdapter: new MacOsActionAdapter()
     });
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       kind: "error",
-      message: safeMessage(error, locale, [apiKey])
+      message: t("desktop.aiServiceUnavailable", locale)
     };
   }
 }
