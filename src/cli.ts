@@ -6,6 +6,7 @@ import { WindowsActionAdapter } from "./actions/windows";
 import { SorKeungBrain } from "./brain/service";
 import { t, type SupportedUiLanguage, type TranslationKey } from "./i18n";
 import { OpenRouterJevDecisionProvider } from "./providers/openrouter-jev";
+import { OpenRouterLlmProvider } from "./providers/openrouter-llm";
 
 function getUiLanguage(): SupportedUiLanguage {
   return process.env.UI_LANGUAGE === "en-GB" ? "en-GB" : "zh-HK";
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
 
     const brain = new SorKeungBrain(
       new OpenRouterJevDecisionProvider(),
+      new OpenRouterLlmProvider(),
       new ActionDispatcher(adapter)
     );
 
@@ -44,11 +46,16 @@ async function main(): Promise<void> {
         process.env.RESPONSE_LANGUAGE_MODE === "fixed" ? "fixed" : "follow-input"
     });
 
-    const data = "data" in result ? result.data : undefined;
+    if (result.kind === "text") {
+      output.write(`${result.text}\n`);
+      return;
+    }
+
+    const data = result.result.data;
     const app = data && typeof data.app === "string" ? data.app : "";
 
     output.write(
-      `${t(result.messageKey as TranslationKey, locale, { app })}\n`
+      `${t(result.result.messageKey as TranslationKey, locale, { app })}\n`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
