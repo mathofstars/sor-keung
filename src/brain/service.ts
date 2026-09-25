@@ -28,6 +28,13 @@ export class SorKeungBrain {
       };
     }
 
+    if (decision.route === "action_error") {
+      return {
+        kind: "action",
+        result: decision.result
+      };
+    }
+
     return {
       kind: "action",
       result: await this.dispatcher.dispatch(decision.action)
