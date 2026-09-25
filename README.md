@@ -6,8 +6,8 @@ Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assist
 
 **Stage 3 — Desktop UI & Secure Settings**
 
-- **DEVELOPMENT IMPLEMENTED**
-- **AUTOMATED BUILD VERIFIED**
+- **FINAL STAGE 3 PHYSICAL-ACCEPTANCE FIXES IMPLEMENTED**
+- **FINAL MANUAL CI VERIFICATION PENDING**
 - **PHYSICAL MAC ACCEPTANCE PENDING**
 - Development branch: `feature/stage-3-desktop-ui`
 - Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
@@ -21,7 +21,7 @@ Stage 3 turns the Stage 2.5 test shell into the first usable text-first desktop 
 Tauri frontend
    │
    ├─ chat UI / session transcript
-   ├─ non-secret preferences → Tauri Store
+   ├─ chat UI / safe Markdown rendering
    │
    └─ narrow invoke commands
           │
@@ -30,14 +30,16 @@ Tauri frontend
           │
           ├─ API key status/save/delete → OS credential store
           │                               (macOS Keychain)
+          ├─ process-only credential cache
+          ├─ all non-secret preferences ↔ Tauri Store
           ├─ trusted installed-app catalogue
           │   └─ local .app metadata / Info.plist
-          ├─ persisted App Access policy ← Tauri Store
           │
-          └─ run_sor_keung(request)
+          └─ run_sor_keung(input only)
                   │
-                  ├─ retrieve API key from Keychain
-                  ├─ inject trusted app catalogue + policy
+                  ├─ use cached key or retrieve once from Keychain
+                  ├─ reload persisted preferences
+                  ├─ inject response settings + trusted app catalogue + policy
                   ├─ fixed bundled Node sidecar
                   └─ OPENROUTER_API_KEY in child environment only
                               │
@@ -75,6 +77,8 @@ Stage 3 provides:
 - loading state
 - duplicate-submit protection
 - clear error presentation
+- safe common-Markdown rendering for assistant LLM messages
+- plain-text rendering for user messages
 - Settings view
 - keyboard-accessible controls
 - resizable desktop window with minimum usable dimensions
@@ -122,6 +126,8 @@ The system-prompt builder combines the common Sor-Keung instructions, language b
 
 Conversational Cantonese aims for natural Hong Kong written Cantonese without forcing slang or sentence-final particles into every sentence.
 
+Written mode explicitly requires standard Hong Kong Traditional Chinese written grammar and tells the model to avoid conversational Cantonese forms such as `係／唔／佢哋／點解／咁／嚟／嘅／喺／咗` except when quoting or discussing Cantonese. The runtime value is reloaded from the authoritative Tauri Store by the Rust backend for each request rather than trusted from frontend memory.
+
 ### Response language
 
 Stage 3 retains:
@@ -131,6 +137,8 @@ Stage 3 retains:
 - fixed English
 
 The default remains **Follow input language**.
+
+Action acknowledgements follow the resolved response language rather than the interface language. For example, with a Chinese UI, `Open Calculator` returns an English action result, while `開 Calculator` returns the configured Hong Kong Chinese action style.
 
 ### App access
 
@@ -180,14 +188,18 @@ run_sor_keung(request)
 
 There is intentionally **no** command that returns the stored raw key to JavaScript.
 
+After the first successful credential lookup in a running Sor-Keung process, the secret is cached only in trusted Rust process memory for that application session. Normal subsequent chat requests therefore perform **zero additional Keychain reads**. Replacing the API key updates both Keychain and the session cache; deleting it removes the Keychain credential and immediately clears the cache. Restarting Sor-Keung may require one fresh Keychain authorization, especially for a newly ad-hoc re-signed development build.
+
 Normal chat flow:
 
 ```text
 Frontend
-   │ run_sor_keung(request)
+   │ run_sor_keung({ input })
    ▼
 Rust bridge
-   │ retrieve API key from Keychain
+   ├─ cached key, or one Keychain lookup for this process
+   ├─ load authoritative preferences from Tauri Store
+   └─ inject trusted app catalogue + policy + response settings
    ▼
 fixed bundled sidecar
    │ OPENROUTER_API_KEY=<secret> in child environment
@@ -210,17 +222,19 @@ To configure it, open **Settings → OpenRouter API Key**, enter a new key and c
 
 ## Non-secret settings persistence
 
-The official Tauri Store plugin persists only non-secret preferences:
+The Tauri Store persists only non-secret preferences:
 
-- `UI_LANGUAGE`
-- `RESPONSE_STYLE`
+- UI language
+- response style
 - response-language preference
 - `allowAllInstalledApps`
 - `allowedAppIds`
 
-Secrets are kept completely separate in the OS credential store.
+The **Rust backend is the single authority** for loading and saving these values. Settings reloads persisted values every time it opens and shows a loading state until they are available. The frontend no longer has direct Tauri Store capability.
 
-The Rust bridge reads the persisted app-access policy itself before each chat request and injects it into the fixed sidecar together with the trusted catalogue. The JavaScript chat request cannot supply a replacement catalogue or policy.
+Secrets remain completely separate in the OS credential store.
+
+Before every chat request, the Rust bridge reloads the same persisted preference object and injects the response settings and App Access policy into the sidecar. The JavaScript chat request supplies only the current user input and cannot override response style, response language, app catalogue, or App Access policy.
 
 ## Security boundary
 
@@ -236,14 +250,13 @@ LLM → OS adapter
 model output → exec()
 ```
 
-The frontend capability grants:
+The frontend capability grants only:
 
 ```text
 core:default
-store:default
 ```
 
-It does **not** grant frontend shell execute/spawn permissions.
+The frontend has neither direct Store capability nor shell execute/spawn permissions.
 
 The only executable OS capability remains:
 
@@ -293,6 +306,24 @@ No shell command is concatenated.
 
 No filesystem deletion, arbitrary shell, browser automation, or additional OS action has been added.
 
+## Safe Markdown rendering
+
+Assistant responses from the LLM are parsed with maintained Markdown AST utilities and converted through an explicit allowlist sanitisation policy.
+
+Supported presentation includes:
+
+- paragraphs
+- bold and italic text
+- headings
+- unordered and ordered lists
+- inline code
+- fenced code blocks
+- blockquotes
+
+Raw HTML is neutralised before Markdown parsing, dangerous HTML is disabled in the AST conversion, and the resulting HTML tree is sanitised to an allowlist containing only the presentation elements above. Script, image, event-handler, link and arbitrary-attribute content cannot become active DOM.
+
+User messages are never Markdown-rendered; they remain literal plain text.
+
 ## Providers
 
 Decision layer:
@@ -336,45 +367,48 @@ Workflow:
 .github/workflows/stage2-5-macos-build.yml
 ```
 
-The file name is retained from the earlier stage, but its workflow is now **Stage 3 macOS build** and targets `feature/stage-3-desktop-ui`.
+To conserve GitHub Actions minutes during final Stage 3 development, this workflow is now **manual-only**. It no longer runs on every feature-branch commit.
 
-It runs:
-
-```text
-checkout
-→ Node 24
-→ Rust stable / aarch64-apple-darwin
-→ npm install
-→ icon generation
-→ TypeScript typecheck
-→ full TypeScript tests
-→ Node sidecar build
-→ sidecar architecture + codesign verification
-→ frontend build
-→ Rust credential/bridge tests
-→ Tauri app + DMG build
-→ macOS launch-metadata verification
-→ direct-run app packaging
-→ artifact upload
-```
-
-No real OpenRouter API key or Apple Developer credential is needed in CI.
-
-Verified Stage 3 implementation run:
+The final workflow is split into two gates:
 
 ```text
-TypeScript typecheck: PASS
-TypeScript tests: 75 passed / 0 failed
-Rust credential/catalogue/bridge tests: 3 passed / 0 failed
-Node sidecar: Mach-O 64-bit executable arm64
-Sidecar codesign verification: PASS
-Tauri .app build: PASS
-Tauri .dmg build: PASS
-Direct-run app packaging: PASS
-Artifact uploads: PASS
+Ubuntu verification
+  → npm install
+  → TypeScript typecheck
+  → full TypeScript tests
+  → frontend production build
+
+only if that succeeds:
+
+macOS arm64 build
+  → npm install
+  → icon generation
+  → Apple Silicon Node sidecar
+  → arm64 / codesign verification
+  → frontend build
+  → Rust credential/settings/bridge tests
+  → Tauri .app + .dmg
+  → launch-metadata verification
+  → direct-run app packaging
+  → artifact upload
 ```
 
-Artifacts:
+This prevents a TypeScript regression from consuming expensive macOS runner minutes.
+
+The previous accepted Stage 3 base and installed-app implementation were built successfully before these final physical-acceptance fixes. The current final-fix branch is intentionally waiting for **one final complete manual CI run** after all source and documentation changes are finished.
+
+The current regression suite contains approximately:
+
+```text
+TypeScript tests: 92
+Rust credential/settings/bridge tests: 8
+```
+
+The final completion report uses the actual counts from that one final workflow run rather than treating these pre-run counts as verified.
+
+No real OpenRouter API key or Apple Developer credential is required by CI.
+
+Artifacts produced by a successful final run:
 
 ```text
 Sor-Keung-direct-app-aarch64-apple-darwin
@@ -412,60 +446,43 @@ A future public build should use proper Developer ID signing and notarization ra
 
 ## Physical Mac acceptance — pending
 
-Stage 3 must be tested on the existing Apple Silicon Mac before it can be considered accepted for merge.
+After the final CI build, only the focused acceptance areas that previously failed need to be repeated:
 
-Test the downloaded Stage 3 artifact as follows:
+1. **Keychain behaviour**
+   - launch the newly installed/re-signed build
+   - grant any initial Keychain authorization required by the changed ad-hoc code identity
+   - open several applications across several requests
+   - confirm repeated double password prompts do not recur during the same app process
 
-1. **First launch**
-   - app opens normally (using the documented enterprise-Mac workaround if required)
-   - no-key state clearly directs the user to Settings
+2. **App Access persistence**
+   - set **Allow all installed applications = OFF**
+   - enable only Calculator and Messages
+   - navigate **Settings → Chat → Settings**
+   - confirm allow-all remains OFF and exactly Calculator + Messages remain enabled
+   - `Open Calculator` succeeds
+   - `Open Messages` succeeds
+   - `Open Safari` is blocked
+   - switch allow-all ON and confirm Safari can open
 
-2. **Secure API key**
-   - add the OpenRouter key in Settings
-   - quit Sor-Keung
-   - reopen it
-   - Settings still reports the key as configured
-   - the raw key is never displayed
+3. **Follow-input action language**
+   - with a Chinese UI, `Open Calculator` must receive an English success response
+   - `開 Calculator` should receive the configured Hong Kong Chinese response style
 
-3. **Default Cantonese style**
-   - ensure `香港口語廣東話` is selected
-   - ask: `解釋量子糾纏是甚麼`
+4. **Markdown**
+   - confirm real LLM output renders bold, headings, lists and code blocks without showing unnecessary Markdown markers
+   - unsafe raw HTML must not create active DOM content
+
+5. **Cantonese mode**
+   - select `香港口語廣東話`
+   - ask `解釋量子糾纏是甚麼`
    - confirm natural Hong Kong Cantonese
 
-4. **Written Chinese style**
-   - switch to `香港繁體中文書面語`
+6. **Written mode**
+   - select `香港繁體中文書面語`
    - ask the same question
-   - confirm the response changes appropriately to Hong Kong written Traditional Chinese
+   - confirm genuine written Hong Kong Traditional Chinese without conversational forms such as `係／唔／佢哋／點解`, except when explicitly quoting Cantonese
 
-5. **English follow-input**
-   - ask: `Explain quantum entanglement simply.`
-   - confirm an English response
-
-6. **Installed application catalogue — allow all**
-   - confirm **Allow all installed applications** defaults to ON
-   - `Open Messages` → Messages opens when installed
-   - `開 Calculator` → Calculator opens when installed
-   - `Open Safari` → Safari opens
-   - `Open Preview` → Preview opens when installed
-
-7. **Selected-app-only policy**
-   - turn **Allow all installed applications** OFF
-   - confirm the installed-app list appears
-   - disable Messages and save Settings
-   - `Open Messages` must be blocked and Messages must not launch
-   - enable Messages and save Settings
-   - `Open Messages` should now succeed
-   - quit and reopen Sor-Keung and confirm the App Access setting persists
-
-8. **Invalid / ambiguous app**
-   - request a non-existent app and confirm a safe app-not-found response with no launch
-   - if two installed apps plausibly match a request, confirm Sor-Keung launches neither
-
-9. **Security**
-   - an unsupported dangerous computer instruction must not execute any filesystem or arbitrary shell action
-   - app requests must never accept an executable path or model-generated command line
-
-Do not mark physical acceptance complete until these tests have been performed on the Mac.
+Only after these six areas pass should Stage 3 be considered ready for squash merge into `develop`.
 
 ## Running development checks
 
