@@ -76,8 +76,8 @@ export class OpenRouterJevDecisionProvider implements DecisionProvider {
     ) as Record<string, string>;
 
     const criteria: Record<string, string> = {
-      unsupported:
-        "The user is not clearly asking to open or launch one of the listed desktop applications."
+      llm:
+        "The request is a general question, explanation, writing or summarisation request, an unsupported computer action, or anything that is not clearly an allowed open-app action below."
     };
 
     for (const [option, app] of Object.entries(optionToApp)) {
@@ -100,18 +100,20 @@ export class OpenRouterJevDecisionProvider implements DecisionProvider {
             intent: {
               type: "choice",
               instructions:
-                "Choose the single best Stage 1 action for the user's request. Only classify an app-opening request when the requested application exactly matches one of the named application criteria. Otherwise choose unsupported.",
+                "Route the request. Select an open_app option only when the user clearly asks to open exactly that listed desktop application. Route every other request to llm. Never invent an OS action.",
               criteria
             }
           }
         })
       });
     } catch {
-      throw new Error("OpenRouter request failed");
+      throw new Error("OpenRouter decision request failed");
     }
 
     if (!response.ok) {
-      throw new Error(`OpenRouter request failed with status ${response.status}`);
+      throw new Error(
+        `OpenRouter decision request failed with status ${response.status}`
+      );
     }
 
     const payload = await response.json();
@@ -129,13 +131,17 @@ export class OpenRouterJevDecisionProvider implements DecisionProvider {
       throw new Error("Malformed Jev choice response");
     }
 
-    if (answer.choice === "unsupported" || answer.confidence < this.minConfidence) {
-      return { route: "unsupported", reason: "unsupported_or_uncertain" };
+    if (answer.confidence < this.minConfidence) {
+      return { route: "llm" };
+    }
+
+    if (answer.choice === "llm") {
+      return { route: "llm" };
     }
 
     const app = optionToApp[answer.choice];
     if (!app) {
-      return { route: "unsupported", reason: "unknown_choice" };
+      throw new Error("Unexpected Jev choice");
     }
 
     const action = validateActionCandidate({
