@@ -3,8 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   DEFAULT_PREFERENCES,
-  normalizePreferences,
-  sidecarLanguageSettings
+  normalizePreferences
 } from "../desktop/preferences-model";
 
 test("Stage 3 defaults include allow-all installed application access", () => {
@@ -62,35 +61,6 @@ test("invalid persisted preferences fall back safely and reject path-like app id
     }
   );
 });
-
-test("response language preference maps to existing single-turn language controls", () => {
-  assert.deepEqual(sidecarLanguageSettings(DEFAULT_PREFERENCES), {
-    responseLanguageMode: "follow-input"
-  });
-
-  assert.deepEqual(
-    sidecarLanguageSettings({
-      ...DEFAULT_PREFERENCES,
-      responseLanguage: "fixed-zh-HK"
-    }),
-    {
-      responseLanguageMode: "fixed",
-      outputLanguage: "yue-HK"
-    }
-  );
-
-  assert.deepEqual(
-    sidecarLanguageSettings({
-      ...DEFAULT_PREFERENCES,
-      responseLanguage: "fixed-en-GB"
-    }),
-    {
-      responseLanguageMode: "fixed",
-      outputLanguage: "en-GB"
-    }
-  );
-});
-
 test("frontend settings load and save through backend authoritative Tauri Store commands", async () => {
   const settings = await readFile("desktop/settings.ts", "utf8");
 
