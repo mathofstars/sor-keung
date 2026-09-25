@@ -232,6 +232,11 @@ impl AppCatalog for MacOsAppCatalog {
             PathBuf::from("/Applications"),
             PathBuf::from("/System/Applications"),
             PathBuf::from("/System/Library/CoreServices/Applications"),
+            // Safari and other system apps may be delivered from the signed
+            // App Cryptex on modern macOS releases (including Tahoe).
+            PathBuf::from(
+                "/System/Volumes/Preboot/Cryptexes/App/System/Applications",
+            ),
         ]);
 
         for root in roots {
