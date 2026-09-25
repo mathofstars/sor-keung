@@ -26,10 +26,9 @@ const SAFE_MARKDOWN_SCHEMA: Schema = {
 };
 
 function neutraliseRawHtml(markdown: string): string {
-  return markdown
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  // Escaping "<" is sufficient to stop CommonMark from creating raw HTML
+  // nodes while preserving Markdown syntax such as blockquotes (">").
+  return markdown.replaceAll("<", "&lt;");
 }
 
 export function markdownToSafeHtml(markdown: string): string {
