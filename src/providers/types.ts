@@ -1,4 +1,4 @@
-import type { DecisionInput, DecisionResult } from "../brain/types";
+import type { DecisionInput, DecisionResult, ResponseStyle } from "../brain/types";
 import type { SpeechInput, SpeechOutput, TranscriptionResult } from "../voice/types";
 
 export interface ProviderMetadata {
@@ -15,6 +15,7 @@ export interface LlmRequest {
   inputLanguage?: string;
   outputLanguage?: string;
   responseLanguageMode?: "follow-input" | "fixed";
+  responseStyle?: ResponseStyle;
 }
 
 export interface LlmResponse {
