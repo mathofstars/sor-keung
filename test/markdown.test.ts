@@ -13,8 +13,8 @@ test("assistant Markdown renders headings", () => {
 });
 
 test("assistant Markdown renders unordered and ordered lists", () => {
-  const unordered = markdownToSafeHtml("- One\\n- Two");
-  const ordered = markdownToSafeHtml("1. One\\n2. Two");
+  const unordered = markdownToSafeHtml("- One\n- Two");
+  const ordered = markdownToSafeHtml("1. One\n2. Two");
   assert.match(unordered, /<ul>/);
   assert.match(unordered, /<li>One<\/li>/);
   assert.match(unordered, /<li>Two<\/li>/);
@@ -22,9 +22,9 @@ test("assistant Markdown renders unordered and ordered lists", () => {
 });
 
 test("assistant Markdown renders fenced code blocks and inline code", () => {
-  const block = markdownToSafeHtml("```sh\\necho hello\\n```");
+  const block = markdownToSafeHtml("```sh\necho hello\n```");
   const inline = markdownToSafeHtml("Use `npm test`.");
-  assert.match(block, /<pre><code>echo hello\\n<\/code><\/pre>/);
+  assert.match(block, /<pre><code>echo hello\n<\/code><\/pre>/);
   assert.match(inline, /<code>npm test<\/code>/);
 });
 
@@ -35,7 +35,7 @@ test("assistant Markdown renders blockquotes and emphasis", () => {
 });
 
 test("raw HTML and active DOM content are neutralised", () => {
-  const html = markdownToSafeHtml('<script>alert("x")</script>\\n<img src=x onerror="alert(1)">\\n**safe**');
+  const html = markdownToSafeHtml('<script>alert("x")</script>\n<img src=x onerror="alert(1)">\n**safe**');
   assert.doesNotMatch(html, /<script/i);
   assert.doesNotMatch(html, /<img/i);
   assert.doesNotMatch(html, /onerror/i);
