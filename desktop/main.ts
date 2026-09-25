@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { InstalledAppRecord } from "../src/apps/types";
 import {
   t,
   type SupportedUiLanguage,
@@ -43,7 +44,6 @@ const settingsView = requireElement<HTMLElement>("#settings-view");
 const transcript = requireElement<HTMLElement>("#transcript");
 const emptyChat = requireElement<HTMLElement>("#empty-chat");
 const missingKeyNotice = requireElement<HTMLElement>("#missing-key-notice");
-const missingKeyMessage = requireElement<HTMLElement>("#missing-key-message");
 const form = requireElement<HTMLFormElement>("#request-form");
 const requestInput = requireElement<HTMLTextAreaElement>("#request-input");
 const sendButton = requireElement<HTMLButtonElement>("#send-button");
@@ -75,14 +75,28 @@ const responseStyleSelect = requireElement<HTMLSelectElement>(
 const responseLanguageSelect = requireElement<HTMLSelectElement>(
   "#response-language-select"
 );
+const allowAllInstalledApps = requireElement<HTMLInputElement>(
+  "#allow-all-installed-apps"
+);
+const appAccessListContainer = requireElement<HTMLElement>(
+  "#app-access-list-container"
+);
+const appAccessList = requireElement<HTMLElement>("#app-access-list");
+const appAccessStatus = requireElement<HTMLElement>("#app-access-status");
 const preferencesSaveButton = requireElement<HTMLButtonElement>(
   "#preferences-save-button"
 );
 const preferencesStatus = requireElement<HTMLElement>("#preferences-status");
 
-let preferences: AppPreferences = { ...DEFAULT_PREFERENCES };
+let preferences: AppPreferences = {
+  ...DEFAULT_PREFERENCES,
+  allowedAppIds: [...DEFAULT_PREFERENCES.allowedAppIds]
+};
 let apiKeyConfigured = false;
 let requestRunning = false;
+let installedApps: readonly InstalledAppRecord[] = [];
+let installedAppsLoaded = false;
+let installedAppsLoading = false;
 
 function tr(key: TranslationKey): string {
   return t(key, preferences.uiLanguage);
@@ -90,6 +104,59 @@ function tr(key: TranslationKey): string {
 
 function setText(id: string, key: TranslationKey): void {
   requireElement<HTMLElement>(`#${id}`).textContent = tr(key);
+}
+
+function renderApiKeyStatus(): void {
+  apiKeyStatus.textContent = apiKeyConfigured
+    ? tr("settings.apiConfigured")
+    : tr("settings.apiNotConfigured");
+  apiKeyStatus.dataset.configured = String(apiKeyConfigured);
+  missingKeyNotice.hidden = apiKeyConfigured;
+  apiKeyRemoveButton.disabled = !apiKeyConfigured;
+}
+
+function renderInstalledAppControls(): void {
+  appAccessListContainer.hidden = allowAllInstalledApps.checked;
+
+  if (allowAllInstalledApps.checked) {
+    return;
+  }
+
+  appAccessList.replaceChildren();
+
+  if (installedAppsLoading) {
+    appAccessStatus.textContent = tr("settings.appAccessLoading");
+    return;
+  }
+
+  if (!installedAppsLoaded) {
+    appAccessStatus.textContent = "";
+    return;
+  }
+
+  if (installedApps.length === 0) {
+    appAccessStatus.textContent = tr("settings.appAccessNone");
+    return;
+  }
+
+  appAccessStatus.textContent = "";
+  const allowed = new Set(preferences.allowedAppIds);
+
+  for (const app of installedApps) {
+    const label = document.createElement("label");
+    label.className = "app-access-item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.appId = app.id;
+    checkbox.checked = allowed.has(app.id);
+
+    const text = document.createElement("span");
+    text.textContent = app.displayName;
+
+    label.append(checkbox, text);
+    appAccessList.append(label);
+  }
 }
 
 function applyTranslations(): void {
@@ -111,6 +178,12 @@ function applyTranslations(): void {
   apiKeyInput.placeholder = tr("settings.apiKeyPlaceholder");
   apiKeySaveButton.textContent = tr("settings.apiSave");
   apiKeyRemoveButton.textContent = tr("settings.apiRemove");
+  setText("app-access-title", "settings.appAccess");
+  setText(
+    "allow-all-installed-apps-label",
+    "settings.allowAllInstalledApps"
+  );
+  setText("app-access-help", "settings.appAccessHelp");
   setText("ui-language-label", "settings.interfaceLanguage");
   setText("response-style-label", "settings.responseStyle");
   setText("response-language-label", "settings.responseLanguage");
@@ -131,21 +204,15 @@ function applyTranslations(): void {
   });
 
   renderApiKeyStatus();
-}
-
-function renderApiKeyStatus(): void {
-  apiKeyStatus.textContent = apiKeyConfigured
-    ? tr("settings.apiConfigured")
-    : tr("settings.apiNotConfigured");
-  apiKeyStatus.dataset.configured = String(apiKeyConfigured);
-  missingKeyNotice.hidden = apiKeyConfigured;
-  apiKeyRemoveButton.disabled = !apiKeyConfigured;
+  renderInstalledAppControls();
 }
 
 function syncPreferenceControls(): void {
   uiLanguageSelect.value = preferences.uiLanguage;
   responseStyleSelect.value = preferences.responseStyle;
   responseLanguageSelect.value = preferences.responseLanguage;
+  allowAllInstalledApps.checked = preferences.allowAllInstalledApps;
+  renderInstalledAppControls();
 }
 
 function setSettingsStatus(message: string, isError = false): void {
@@ -153,10 +220,52 @@ function setSettingsStatus(message: string, isError = false): void {
   apiKeyOperationStatus.classList.toggle("error-text", isError);
 }
 
+async function refreshInstalledApps(): Promise<void> {
+  if (installedAppsLoaded || installedAppsLoading) {
+    renderInstalledAppControls();
+    return;
+  }
+
+  installedAppsLoading = true;
+  renderInstalledAppControls();
+
+  try {
+    installedApps = await invoke<InstalledAppRecord[]>(
+      "list_installed_apps"
+    );
+    installedAppsLoaded = true;
+  } catch {
+    installedApps = [];
+    installedAppsLoaded = false;
+    appAccessStatus.textContent = tr("settings.appAccessLoadError");
+  } finally {
+    installedAppsLoading = false;
+    renderInstalledAppControls();
+    if (!installedAppsLoaded) {
+      appAccessStatus.textContent = tr("settings.appAccessLoadError");
+    }
+  }
+}
+
+function selectedInstalledAppIds(): string[] {
+  if (!installedAppsLoaded) {
+    return [...preferences.allowedAppIds];
+  }
+
+  return Array.from(
+    appAccessList.querySelectorAll<HTMLInputElement>(
+      'input[type="checkbox"][data-app-id]:checked'
+    )
+  )
+    .map((checkbox) => checkbox.dataset.appId ?? "")
+    .filter(Boolean);
+}
+
 function openSettings(): void {
   chatView.hidden = true;
   settingsView.hidden = false;
   syncPreferenceControls();
+  void refreshInstalledApps();
   if (!apiKeyConfigured) {
     apiKeyInput.focus();
   } else {
@@ -272,6 +381,13 @@ settingsButton.addEventListener("click", openSettings);
 missingKeySettingsButton.addEventListener("click", openSettings);
 settingsBackButton.addEventListener("click", closeSettings);
 
+allowAllInstalledApps.addEventListener("change", () => {
+  renderInstalledAppControls();
+  if (!allowAllInstalledApps.checked) {
+    void refreshInstalledApps();
+  }
+});
+
 apiKeySaveButton.addEventListener("click", async () => {
   const secret = apiKeyInput.value.trim();
   if (!secret) {
@@ -318,7 +434,9 @@ preferencesSaveButton.addEventListener("click", async () => {
         ? "written-zh-hk"
         : "cantonese-hk",
     responseLanguage:
-      responseLanguageSelect.value as ResponseLanguagePreference
+      responseLanguageSelect.value as ResponseLanguagePreference,
+    allowAllInstalledApps: allowAllInstalledApps.checked,
+    allowedAppIds: selectedInstalledAppIds()
   };
 
   try {
@@ -336,7 +454,10 @@ async function initialise(): Promise<void> {
   try {
     preferences = await loadPreferences();
   } catch {
-    preferences = { ...DEFAULT_PREFERENCES };
+    preferences = {
+      ...DEFAULT_PREFERENCES,
+      allowedAppIds: [...DEFAULT_PREFERENCES.allowedAppIds]
+    };
   }
 
   syncPreferenceControls();
