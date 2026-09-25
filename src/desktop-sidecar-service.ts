@@ -42,6 +42,18 @@ function uiLocaleFor(request: DesktopSidecarRequest): SupportedUiLanguage {
   return request.uiLanguage === "en-GB" ? "en-GB" : "zh-HK";
 }
 
+function followInputLocale(input: string): SupportedUiLanguage {
+  if (/^\s*(?:please\s+)?(?:open|launch|start)\b/i.test(input)) {
+    return "en-GB";
+  }
+
+  if (/^\s*請?(?:幫我)?(?:打開|開啟|啟動|開)/u.test(input)) {
+    return "zh-HK";
+  }
+
+  return /\p{Script=Han}/u.test(input) ? "zh-HK" : "en-GB";
+}
+
 function responseLocaleFor(
   request: DesktopSidecarRequest
 ): SupportedUiLanguage {
@@ -63,7 +75,7 @@ function responseLocaleFor(
     return "zh-HK";
   }
 
-  return /\p{Script=Han}/u.test(request.input) ? "zh-HK" : "en-GB";
+  return followInputLocale(request.input);
 }
 
 function actionMessageKey(
