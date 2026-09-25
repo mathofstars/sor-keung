@@ -15,6 +15,7 @@ tauri-build = "2.6.3"
 
 [dependencies]
 keyring = "4.2.0"
+plist = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = "2.11.6"
