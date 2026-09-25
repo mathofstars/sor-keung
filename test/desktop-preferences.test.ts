@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   DEFAULT_PREFERENCES,
@@ -88,4 +89,14 @@ test("response language preference maps to existing single-turn language control
       outputLanguage: "en-GB"
     }
   );
+});
+
+test("app access policy is persisted with the existing non-secret preferences store", async () => {
+  const settings = await readFile("desktop/settings.ts", "utf8");
+
+  assert.match(
+    settings,
+    /store\.set\(PREFERENCES_KEY, normalizePreferences\(preferences\)\)/
+  );
+  assert.match(settings, /store\.save\(\)/);
 });
