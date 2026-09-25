@@ -1,413 +1,382 @@
 # Sor-Keung（傻強）
 
-Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assistant** for macOS and Windows.
+Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assistant**.
 
-The project is currently at **Stage 2: text → Jev routing → either a validated OS action or a general LLM text response**.
+## Current status
 
-## Product principles
+**Stage 2.5 — macOS Apple Silicon test package**
 
-- **Voice optional, text always available.**
-- Default UI language: Traditional Chinese (Hong Kong), `zh-HK`.
-- Default voice input/output language: Cantonese (Hong Kong), `yue-HK`.
-- Written Chinese responses use clear Hong Kong Traditional Chinese rather than Simplified Chinese by default.
-- Response language can follow the user's input or be configured explicitly.
-- Decision, LLM, speech, and OS providers remain replaceable.
-- Shared AI logic stays independent from OS-specific actions.
-- No unrestricted shell execution.
-- No real API keys or credentials in Git.
+- **BUILD VERIFIED**
+- **PHYSICAL MAC ACCEPTANCE PENDING**
+- Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
+- This is a development/testing package, not a notarized public release.
 
-## Current architecture
+Stage 2.5 wraps the existing Stage 2 TypeScript/Node.js core in a minimal Tauri v2 desktop shell. The Sor-Keung brain remains the source of truth; it has not been rewritten in Rust or moved into the webview.
+
+## Architecture
 
 ```text
-CLI / text input
-      ↓
-Sor-Keung Brain
-      ↓
-Jev decision provider
-      │
-      ├── action
-      │     ↓
-      │  typed ActionRequest
-      │     ↓
-      │  validation
-      │     ↓
-      │  ActionDispatcher
-      │     ↓
-      │  macOS adapter
-      │     ↓
-      │  open_app
-      │     ↓
-      │  localised text result
-      │
-      └── llm
-            ↓
-         LlmProvider
-            ↓
-      OpenRouter chat completion
-            ↓
-         text answer only
+┌──────────────────────────────────────┐
+│             Tauri .app               │
+│                                      │
+│   Minimal TypeScript UI              │
+│          │                           │
+│          ▼                           │
+│   invoke("run_sor_keung")            │
+│          │                           │
+│          ▼                           │
+│   Narrow Rust bridge                 │
+│          │                           │
+│          ▼                           │
+│   Bundled Node sidecar               │
+│          │                           │
+│          ▼                           │
+│   EXISTING Stage 2 Brain             │
+│          │                           │
+│       Jev Router                     │
+│       /       \                      │
+│ Action          LLM                  │
+│   │              │                   │
+│ validation    OpenRouter             │
+│   │              │                   │
+│ dispatcher    text only              │
+│   │                                  │
+│ macOS open_app                       │
+└──────────────────────────────────────┘
 ```
 
-The two routes are deliberately separate:
+The Tauri layer is only transport/UI. It does not duplicate Jev, LLM, validation, dispatcher, or action logic.
 
-- **Jev → validated action pipeline** is the only path that can reach an OS adapter.
-- **Jev → LLM provider** returns text only. LLM output is never parsed back into an executable action.
+## Current functionality
 
-If the Jev API itself fails, Sor-Keung fails safely. It does **not** assume the request is general text and silently send it to the LLM.
+The test app contains only:
 
-## Stage 1 action behaviour
+- Sor-Keung / 傻強 title
+- session-only OpenRouter API key password field
+- one text input
+- Send button
+- loading/error/result state
 
-Stage 1 behaviour remains intact. Only `open_app` is executable.
+Existing Stage 1/2 behaviour remains:
 
-The initial application catalogue remains intentionally small:
+- `開 Spotify` / `Open Spotify` → Jev → validated `open_app` → macOS adapter
+- general questions → Jev → configured LLM → text response
+- LLM output is never converted into an executable action
+
+Current executable app catalogue remains intentionally small:
 
 - Spotify
 - Safari
 - Calculator
 
-Both:
+## macOS packaging
+
+Current packaging versions:
+
+- Tauri Rust crate: `2.11.6`
+- Tauri CLI: `2.11.5`
+- `@tauri-apps/api`: `2.11.1`
+- `tauri-plugin-shell`: `2.3.6`
+- Node sidecar packager: `@yao-pkg/pkg 6.22.0`
+- sidecar target: `node24-macos-arm64`
+- Tauri target: `aarch64-apple-darwin`
+
+The standalone Node sidecar is named using Tauri's target-triple convention:
+
+```text
+src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
+```
+
+The end user does **not** need Node.js, npm, Rust, or Cargo installed to run the packaged app.
+
+The app iconset is generated during CI from `app-icon.svg` using Tauri's own `tauri icon` command.
+
+## API key handling
+
+The OpenRouter API key is **session-only**.
+
+```text
+password input
+    ↓
+Tauri invoke
+    ↓
+Rust run_sor_keung command
+    ↓
+child-process environment
+OPENROUTER_API_KEY=<session value>
+    ↓
+bundled Sor-Keung sidecar
+```
+
+The key is **not**:
+
+- committed to Git
+- bundled into the application
+- stored in `.env` inside the app
+- saved to `localStorage`, `sessionStorage`, preferences, JSON, or another settings file
+- logged
+- passed as a sidecar command-line argument
+- required as a GitHub Actions secret
+
+The user pastes the key again after relaunching the Stage 2.5 test app.
+
+## Security boundary
+
+The frontend has no generic shell or executable permission.
+
+The Tauri capability grants only:
+
+```text
+core:default
+```
+
+It does **not** grant frontend `shell:allow-execute` or `shell:allow-spawn`.
+
+The only frontend bridge is:
+
+```text
+invoke("run_sor_keung", ...)
+```
+
+The Rust bridge itself chooses the fixed bundled `sor-keung-sidecar`. The frontend cannot supply an executable path.
+
+There is no:
+
+- `run_shell`
+- `run_arbitrary_shell_command`
+- frontend → arbitrary executable route
+- LLM → shell route
+- model-output → exec route
+
+Only the existing validated `open_app` pipeline can perform an OS action.
+
+### macOS open_app
+
+For packaged macOS execution the adapter uses the stable absolute system path:
+
+```text
+/usr/bin/open
+["-a", appName]
+shell: false
+```
+
+The application name remains a process argument, never concatenated shell syntax.
+
+## OpenRouter providers
+
+Decision layer:
+
+```text
+DECISION_PROVIDER=openrouter
+DECISION_MODEL=typesafe/jev-1.13
+```
+
+General LLM:
+
+```text
+LLM_PROVIDER=openrouter
+LLM_MODEL=openai/gpt-5.4-mini
+```
+
+Both reuse the same session OpenRouter API key.
+
+## GitHub Actions macOS build
+
+Workflow:
+
+```text
+.github/workflows/stage2-5-macos-build.yml
+```
+
+It supports `workflow_dispatch` and also verifies pushes to the Stage 2.5 feature branch.
+
+The workflow performs:
+
+```text
+checkout
+→ Node 24
+→ Rust stable / aarch64-apple-darwin
+→ npm install
+→ Tauri icon generation
+→ TypeScript typecheck
+→ full automated tests
+→ @yao-pkg/pkg arm64 sidecar build
+→ sidecar architecture + codesign verification
+→ Tauri app + DMG build
+→ upload ordinary Actions artifacts
+```
+
+No OpenRouter credential is needed to build.
+
+No Apple Developer credentials are needed at this stage.
+
+### Verified build result
+
+The Stage 2.5 workflow has successfully produced:
+
+```text
+Sor-Keung.app
+Sor-Keung_0.2.5_aarch64.dmg
+```
+
+Uploaded artifact names:
+
+```text
+Sor-Keung-app-aarch64-apple-darwin
+Sor-Keung-dmg-aarch64-apple-darwin
+```
+
+A verified run reported:
+
+```text
+TypeScript typecheck: PASS
+Tests: 41 passed, 0 failed
+Node sidecar: Mach-O 64-bit executable arm64
+Sidecar codesign verification: PASS
+Tauri .app build: PASS
+Tauri .dmg build: PASS
+Artifact uploads: PASS
+```
+
+## Signing / Gatekeeper
+
+This internal test build uses macOS **ad-hoc signing**:
+
+```text
+signingIdentity: "-"
+```
+
+This is not Developer ID signing and the app is not notarized.
+
+When downloading the test app from GitHub, macOS Gatekeeper may therefore block the first launch. If that happens, use macOS **System Settings → Privacy & Security** to explicitly approve/open the app.
+
+Official Developer ID signing and notarization are intentionally deferred until Sor-Keung is ready for external distribution.
+
+## Download the M1 test build
+
+From GitHub:
+
+1. Open this repository.
+2. Select **Actions**.
+3. Open **Stage 2.5 macOS build**.
+4. Open the latest successful run for `feature/stage-2-5-macos-test-app`.
+5. Scroll to **Artifacts**.
+6. Download **Sor-Keung-dmg-aarch64-apple-darwin**.
+7. Unzip the GitHub Actions artifact.
+8. Open `Sor-Keung_0.2.5_aarch64.dmg`.
+9. Copy/open Sor-Keung and, if Gatekeeper blocks it, approve it in **System Settings → Privacy & Security**.
+
+The separate `Sor-Keung-app-aarch64-apple-darwin` artifact is also available for direct app-bundle testing.
+
+## Physical Mac acceptance plan
+
+Physical acceptance is **not complete** until the downloaded artifact is tested on the Apple Silicon Mac.
+
+Test these cases:
+
+### A. Cantonese action
 
 ```text
 開 Spotify
 ```
 
-and:
+Expected: Spotify opens and Sor-Keung reports success.
+
+### B. English action
 
 ```text
-Open Spotify
+Open Safari
 ```
 
-are sent to Jev as natural-language state and should resolve to:
+Expected: Safari opens.
 
-```text
-open_app("Spotify")
-```
-
-No Cantonese-specific command parser is used.
-
-The macOS adapter executes the allowlisted action through Node's process API using an argument array:
-
-```text
-executable: open
-arguments: ["-a", appName]
-shell: false
-```
-
-The application name is data, never shell syntax.
-
-## Stage 2 general LLM fallback
-
-Requests that Jev classifies as general/non-action requests are routed to the configured `LlmProvider`.
-
-Examples:
+### C. Chinese LLM route
 
 ```text
 解釋量子糾纏是甚麼
 ```
 
-and:
+Expected: Jev routes to the LLM and the answer is Hong Kong Traditional Chinese text.
+
+### D. English LLM route
 
 ```text
 Explain quantum entanglement simply.
 ```
 
-go through:
+Expected: English text response.
+
+### E. Unknown app
 
 ```text
-Jev → llm route → LlmProvider.generate(...) → text response
+開 ExampleNonexistentApp
 ```
 
-A supported OS action such as `開 Spotify` does **not** also invoke the general LLM.
+Expected: safe error; no crash.
 
-Unsupported computer operations may be routed to the LLM so it can explain that the operation is not supported, but no action is executed.
-
-For example, a request such as deleting files cannot bypass the action boundary because there is no allowlisted `delete_files` action and the LLM route is text-only.
-
-## Sor-Keung system prompt
-
-Stage 2 uses a deliberately short system prompt in `src/brain/system-prompt.ts`.
-
-It establishes:
-
-- assistant name: Sor-Keung / 傻強
-- concise, useful answers
-- multilingual behaviour
-- follow-input response language by default
-- Hong Kong Traditional Chinese for Chinese written responses
-- no claim that unsupported computer actions were completed
-- no ability for the LLM route to bypass action validation or OS adapters
-
-This is intentionally not a large personality prompt. Persona can be separated later.
-
-## Verified OpenRouter APIs
-
-Verified on 25 September 2026 against current OpenRouter documentation.
-
-### Jev / decision API
-
-- Endpoint: `POST https://openrouter.ai/api/alpha/decisions`
-- Authentication: `Authorization: Bearer <OPENROUTER_API_KEY>`
-- Pinned decision model: `typesafe/jev-1.13`
-- Stage 2 uses Jev's Choice primitive to distinguish `open_app` choices from the `llm` route.
-
-Official references:
-
-- TypeSafe System One: https://docs.typesafe.ai/concepts/system-one
-- TypeSafe API reference: https://docs.typesafe.ai/api
-- OpenRouter Jev 1.13: https://openrouter.ai/typesafe/jev-1.13
-
-### General LLM / Chat Completions API
-
-- Endpoint: `POST https://openrouter.ai/api/v1/chat/completions`
-- Authentication: `Authorization: Bearer <OPENROUTER_API_KEY>`
-- Request uses an OpenAI-compatible `messages` array plus a configurable `model`.
-- Stage 2 explicitly uses non-streaming responses.
-- Text is read from `choices[0].message.content`.
-- Non-2xx responses are surfaced as safe provider errors using only the HTTP status; authorization headers/API keys are never included in user-facing errors.
-
-Official references:
-
-- OpenRouter developer platform / quickstart: https://openrouter.ai/developers
-- OpenRouter GPT-5.4 Mini model page: https://openrouter.ai/openai/gpt-5.4-mini
-
-## LLM model
-
-The Stage 2 default is:
+### F. Unsupported dangerous action
 
 ```text
-openai/gpt-5.4-mini
+刪除 Downloads 入面所有檔案
 ```
 
-It is configured through:
+Expected: no filesystem action and no arbitrary shell execution.
 
-```text
-LLM_MODEL=openai/gpt-5.4-mini
-```
+### G. No API key
 
-The model ID is not scattered through the brain or UI. Replacing the model does not require rewriting routing/action logic.
+Launch the app without entering a key.
 
-## Configuration
+Expected: clear configuration error; no crash.
 
-Copy the example file locally:
+## Automated tests
 
-```bash
-cp .env.example .env
-```
-
-Relevant Stage 2 settings:
-
-```text
-UI_LANGUAGE=zh-HK
-INPUT_LANGUAGE=yue-HK
-OUTPUT_LANGUAGE=yue-HK
-RESPONSE_LANGUAGE_MODE=follow-input
-
-DECISION_PROVIDER=openrouter
-DECISION_MODEL=typesafe/jev-1.13
-
-LLM_PROVIDER=openrouter
-LLM_MODEL=openai/gpt-5.4-mini
-
-OPENROUTER_API_KEY=
-```
-
-Jev and the general LLM reuse the same OpenRouter API key.
-
-Never commit the populated `.env`. It remains ignored by Git.
-
-The CLI currently reads environment variables from the process. On macOS:
-
-```bash
-set -a
-source .env
-set +a
-npm run cli
-```
-
-## Run the text prototype
-
-Install dependencies:
+Run locally during development:
 
 ```bash
 npm install
-```
-
-Run:
-
-```bash
-npm run cli
-```
-
-Action example:
-
-```text
-傻強
-輸入指令：開 Spotify
-✓ 已開啟 Spotify
-```
-
-General request example:
-
-```text
-傻強
-輸入指令：解釋量子糾纏是甚麼
-量子糾纏是一種……
-```
-
-Stage 2 remains single-turn. There is no persistent chat history or memory.
-
-## Security boundary
-
-The general LLM is **not** an action generator.
-
-Forbidden architecture:
-
-```text
-User → LLM → generated shell command → exec()
-```
-
-Actual architecture:
-
-```text
-Jev ── action ──→ typed validation → dispatcher → OS adapter
-
-Jev ── llm ─────→ LLM provider → text only
-```
-
-Important safeguards:
-
-- no `run_shell` action
-- no `run_arbitrary_shell_command` capability
-- only `open_app` is executable in the current action dispatcher
-- LLM responses are never sent to the dispatcher
-- user prompt-injection text cannot bypass the dispatcher boundary
-- app names are passed as process arguments, not interpolated into a shell command
-- Jev errors do not silently fall back to the LLM
-- API keys and Authorization headers are not logged
-
-## Project structure
-
-```text
-src/
-├── actions/
-│   ├── common/
-│   ├── macos/
-│   ├── windows/
-│   ├── dispatcher.ts
-│   └── types.ts
-├── brain/
-│   ├── service.ts
-│   ├── system-prompt.ts
-│   ├── types.ts
-│   └── validation.ts
-├── providers/
-│   ├── openrouter-jev.ts
-│   ├── openrouter-llm.ts
-│   └── types.ts
-├── voice/
-├── i18n/
-│   └── locales/
-│       ├── en-GB.json
-│       └── zh-HK.json
-├── cli.ts
-└── index.ts
-
-test/
-├── brain-service.test.ts
-├── dispatcher.test.ts
-├── macos-adapter.test.ts
-├── openrouter-jev.test.ts
-├── openrouter-llm.test.ts
-├── system-prompt.test.ts
-└── validation.test.ts
-```
-
-## Tests
-
-Run:
-
-```bash
 npm run typecheck
 npm test
 ```
 
-The full Stage 1 + Stage 2 test suite uses mocked external APIs and does not consume OpenRouter credits.
+The test suite uses mocks and does not spend OpenRouter credits.
 
-Coverage includes:
+It covers Stage 1/2 regression behaviour plus Stage 2.5:
 
-- Stage 1 `open_app` validation and dispatcher behaviour
-- rejection of arbitrary shell actions
-- safe macOS `open -a <app>` argument-array invocation
-- Cantonese and English app commands
-- action route does not invoke the LLM
-- general request invokes LLM and does not reach the action adapter
-- English general request routing
-- unsupported/dangerous computer requests remain text-only
-- Jev failure does not automatically invoke LLM
-- OpenRouter Chat Completions request shape
-- HTTP 401 / 429 / 500 handling
-- malformed and empty LLM responses
+- action route preserved
+- LLM text-only route preserved
+- structured action / LLM / error responses
 - missing API key handling
-- API key non-disclosure
-- follow-input and fixed-language system-prompt behaviour
-
-At Stage 2 implementation time, GitHub Actions verification passed:
-
-```text
-TypeScript typecheck: PASS
-Tests: 32 passed, 0 failed
-```
-
-No real OpenRouter API smoke test is required for the automated suite.
-
-## Current platform status
-
-### macOS
-
-`open_app` is implemented behind the macOS action adapter.
-
-A physical Mac acceptance test is still required if the development environment cannot launch a macOS GUI application.
-
-### Windows
-
-The Windows adapter remains a non-executing placeholder. Windows action execution is a later stage.
+- frontend cannot invoke arbitrary binaries or shell
+- key is transported via child environment, not command-line arguments
+- key is not persisted by the frontend
+- Tauri capability does not expose shell execute/spawn
+- `/usr/bin/open` safe argument-array invocation
 
 ## Current limitations / non-goals
 
-Not implemented:
+Stage 2.5 does not include:
 
-- speech-to-text
-- text-to-speech
-- microphone handling
-- Groq / Whisper
-- Fish Audio
+- official Apple notarization
+- Developer ID signing
+- App Store distribution
+- Intel or Universal macOS builds
+- Windows/Linux packaging
+- production chat/history UI
+- menu bar/system tray mode
+- settings system or Keychain integration
+- persistent API key
+- microphone, STT, TTS, Groq, Fish Audio
 - wake word / always-listening
-- Tauri / GUI / menu bar UI
 - streaming LLM responses
-- Windows action execution
-- new macOS actions beyond `open_app`
-- arbitrary shell execution
-- filesystem control
-- web search
-- browser control
 - persistent conversation memory
-- vector database
-- autonomous agents/background actions
-- scheduled tasks
-- plugins / MCP
-- startup/login launch
-- installers
+- database/vector store
+- web/browser control
+- new OS actions or filesystem actions
+- arbitrary shell execution
+- autonomous agents
+- updater/auto-launch/installers for public distribution
 
-## Roadmap
-
-1. **Stage 0 — complete:** repository bootstrap.
-2. **Stage 1 — complete on feature branch:** text → Jev → validated `open_app` → macOS.
-3. **Stage 2 — current feature branch:** general LLM fallback.
-4. Stage 3 — desktop text UI.
-5. Stage 4 — Cantonese STT.
-6. Stage 5 — Cantonese TTS.
-7. Stage 6 — Windows action adapter.
-8. Stage 7 — wake word / always-listening behaviour.
+Stage 3 has **not** started.
 
 ## License
 
