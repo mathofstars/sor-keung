@@ -1,10 +1,13 @@
 import type { ActionRequest, ActionResult } from "../actions/types";
 
+export type ResponseStyle = "cantonese-hk" | "written-zh-hk";
+
 export interface DecisionInput {
   text: string;
   inputLanguage?: string;
   responseLanguageMode?: "follow-input" | "fixed";
   outputLanguage?: string;
+  responseStyle?: ResponseStyle;
 }
 
 export type DecisionResult =
