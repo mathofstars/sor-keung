@@ -7,7 +7,7 @@ Sor-Keung is a **Cantonese-first, multilingual, cross-platform desktop AI assist
 **Stage 3 — Desktop UI & Secure Settings**
 
 - **FINAL STAGE 3 PHYSICAL-ACCEPTANCE FIXES IMPLEMENTED**
-- **SAFARI RESOLUTION + TAHOE SIDECAR FIXES IMPLEMENTED — FINAL CI PENDING**
+- **SAFARI RESOLUTION + TAHOE SIDECAR FIXES VERIFIED — GitHub Actions run #79**
 - **PHYSICAL MAC ACCEPTANCE PENDING**
 - Development branch: `feature/stage-3-desktop-ui`
 - Target: `aarch64-apple-darwin` (Apple Silicon, including M1)
@@ -404,24 +404,32 @@ macOS arm64 build
 
 This prevents a TypeScript regression from consuming expensive macOS runner minutes.
 
-Previous final physical-acceptance-fix verification before the Safari/JIT packaging corrections:
+Final Safari/Tahoe verification:
 
 ```text
-GitHub Actions run: #78
-Tested commit: 1ded7d9d01e924cc69c759edc8d75f8b879fa253
+GitHub Actions run: #79
+Tested commit: cf52b5f57e05851b90878910801743110c5135d0
 Conclusion: SUCCESS
 
-TypeScript tests: 94 passed / 0 failed
+Ubuntu verification:
+TypeScript typecheck: PASS
+TypeScript tests: 101 passed / 0 failed
+Frontend production build: PASS
+
+macOS arm64:
 Rust credential/settings/bridge tests: 8 passed / 0 failed
-Apple Silicon .app / .dmg build: PASS
+Node sidecar: Mach-O 64-bit executable arm64
+Initial sidecar codesign verification: PASS
+Tauri .app / .dmg build: PASS
+Sidecar JIT entitlement re-sign: PASS
+Packaged sidecar direct smoke test: PASS
+  {"ok":false,"kind":"error","message":"No sidecar request received."}
+Rebuilt JIT-safe DMG codesign verification: PASS
+Direct-run app packaging: PASS
+Artifact uploads: PASS
 ```
 
-The current branch contains two additional physical-Mac fixes discovered afterwards:
-
-1. Safari/Cryptex installed-app resolution and bundle-ID alias collision prevention.
-2. Node/V8 sidecar JIT entitlement signing for Hardened Runtime on macOS Tahoe.
-
-Those changes are intentionally being accumulated without per-commit Actions runs. One final CI run will verify the current source after the static audit is complete.
+The JIT smoke test directly exercises the failure mode found on macOS Tahoe 26.6.2 without using an API key.
 
 No real OpenRouter API key or Apple Developer credential is required by CI.
 
