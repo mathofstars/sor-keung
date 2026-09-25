@@ -139,3 +139,57 @@ test("selected-only policy with no selected apps blocks every installed app", ()
     assert.equal(isAppAllowed(app, policy), false);
   }
 });
+
+test("bundle identifier suffixes are never treated as human app-name aliases", () => {
+  const safariExtension: InstalledAppRecord = {
+    id: "bundle:io.raindrop.mac.Safari",
+    displayName: "Save to Raindrop.io",
+    platform: "macos",
+    bundleIdentifier: "io.raindrop.mac.Safari",
+    launchName: "Save to Raindrop.io"
+  };
+
+  assert.deepEqual(
+    resolveInstalledApp("Open Safari", [safariExtension]),
+    {
+      kind: "not-found",
+      query: "safari"
+    }
+  );
+});
+
+test("real Safari wins when a Safari-named extension bundle is also installed", () => {
+  const safari = apps.find(
+    (app) => app.bundleIdentifier === "com.apple.Safari"
+  );
+  assert.ok(safari);
+
+  const safariExtension: InstalledAppRecord = {
+    id: "bundle:io.raindrop.mac.Safari",
+    displayName: "Save to Raindrop.io",
+    platform: "macos",
+    bundleIdentifier: "io.raindrop.mac.Safari",
+    launchName: "Save to Raindrop.io"
+  };
+
+  const result = resolveInstalledApp("Open Safari", [
+    safariExtension,
+    safari
+  ]);
+
+  assert.equal(result.kind, "resolved");
+  if (result.kind === "resolved") {
+    assert.equal(result.app.bundleIdentifier, "com.apple.Safari");
+  }
+});
+
+test("macOS catalogue includes the App Cryptex applications root", async () => {
+  const rust = await import("node:fs/promises").then(({ readFile }) =>
+    readFile("src-tauri/src/lib.rs", "utf8")
+  );
+
+  assert.match(
+    rust,
+    /\/System\/Volumes\/Preboot\/Cryptexes\/App\/System\/Applications/
+  );
+});
