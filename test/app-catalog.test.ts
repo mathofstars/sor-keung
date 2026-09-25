@@ -106,3 +106,36 @@ test("selected-app-only policy blocks disabled app and permits enabled app", () 
   assert.equal(isAppAllowed(apps[0], policy), true);
   assert.equal(isAppAllowed(apps[1], policy), false);
 });
+
+test("catalogue re-scan preserves stable bundle identifiers used by policy", async () => {
+  const firstScan = new StaticAppCatalog(apps);
+  const secondScan = new StaticAppCatalog(apps.map((app) => ({ ...app })));
+  const policy = {
+    allowAllInstalledApps: false,
+    allowedAppIds: ["bundle:com.apple.MobileSMS"]
+  };
+
+  const firstMessages = (await firstScan.list()).find(
+    (app) => app.bundleIdentifier === "com.apple.MobileSMS"
+  );
+  const secondMessages = (await secondScan.list()).find(
+    (app) => app.bundleIdentifier === "com.apple.MobileSMS"
+  );
+
+  assert.ok(firstMessages);
+  assert.ok(secondMessages);
+  assert.equal(firstMessages.id, secondMessages.id);
+  assert.equal(isAppAllowed(firstMessages, policy), true);
+  assert.equal(isAppAllowed(secondMessages, policy), true);
+});
+
+test("selected-only policy with no selected apps blocks every installed app", () => {
+  const policy = {
+    allowAllInstalledApps: false,
+    allowedAppIds: []
+  };
+
+  for (const app of apps) {
+    assert.equal(isAppAllowed(app, policy), false);
+  }
+});
