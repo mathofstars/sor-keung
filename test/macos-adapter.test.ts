@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MacOsActionAdapter } from "../src/actions/macos";
 
-test("open_app invokes macOS open with an argument array", async () => {
+test("open_app invokes absolute macOS open path with an argument array", async () => {
   const calls: Array<{ executable: string; args: readonly string[] }> = [];
   const adapter = new MacOsActionAdapter(async (executable, args) => {
     calls.push({ executable, args });
@@ -14,7 +14,9 @@ test("open_app invokes macOS open with an argument array", async () => {
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(calls, [{ executable: "open", args: ["-a", "Spotify"] }]);
+  assert.deepEqual(calls, [
+    { executable: "/usr/bin/open", args: ["-a", "Spotify"] }
+  ]);
 });
 
 test("open_app keeps shell-like characters as app-name data", async () => {
@@ -29,7 +31,10 @@ test("open_app keeps shell-like characters as app-name data", async () => {
   });
 
   assert.deepEqual(calls, [
-    { executable: "open", args: ["-a", "Spotify; echo unsafe"] }
+    {
+      executable: "/usr/bin/open",
+      args: ["-a", "Spotify; echo unsafe"]
+    }
   ]);
 });
 
