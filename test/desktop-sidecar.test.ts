@@ -487,3 +487,100 @@ test("written-zh-hk reaches LLM provider at request time", async () => {
   assert.equal(seenStyle, "written-zh-hk");
   assert.equal(seenInputLanguage, "yue-HK");
 });
+
+test("English Safari request follows input language with Chinese UI", async () => {
+  const safari: ActionRequest = {
+    name: "open_app",
+    args: {
+      id: "bundle:com.apple.Safari",
+      displayName: "Safari",
+      platform: "macos",
+      bundleIdentifier: "com.apple.Safari",
+      launchName: "Safari"
+    }
+  };
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: safari };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      return {
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "Safari" }
+      };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "Open Safari",
+      uiLanguage: "zh-HK",
+      responseLanguageMode: "follow-input"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.equal(result.message, "Safari opened.");
+});
+
+test("Chinese Safari request follows input language with English UI", async () => {
+  const safari: ActionRequest = {
+    name: "open_app",
+    args: {
+      id: "bundle:com.apple.Safari",
+      displayName: "Safari",
+      platform: "macos",
+      bundleIdentifier: "com.apple.Safari",
+      launchName: "Safari"
+    }
+  };
+
+  const decisionProvider: DecisionProvider = {
+    id: "mock-decision",
+    async decide() {
+      return { route: "action", action: safari };
+    }
+  };
+  const llmProvider: LlmProvider = {
+    id: "mock-llm",
+    async generate() {
+      return { text: "unused" };
+    }
+  };
+  const actionAdapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      return {
+        ok: true,
+        code: "OK",
+        messageKey: "actions.openedApp",
+        data: { app: "Safari" }
+      };
+    }
+  };
+
+  const result = await handleDesktopSidecarRequest(
+    {
+      input: "開 Safari",
+      uiLanguage: "en-GB",
+      responseLanguageMode: "follow-input",
+      responseStyle: "cantonese-hk"
+    },
+    { decisionProvider, llmProvider, actionAdapter }
+  );
+
+  assert.equal(result.message, "✓ Safari 已經幫你開咗。");
+});
