@@ -2,16 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 import type { InstalledAppRecord } from "../src/apps/types";
 import {
   t,
-  type SupportedUiLanguage,
   type TranslationKey
 } from "../src/i18n";
+import { renderAssistantMarkdown } from "./markdown";
 import {
   DEFAULT_PREFERENCES,
   loadPreferences,
   savePreferences
 } from "./settings";
 import {
-  sidecarLanguageSettings,
   type AppPreferences,
   type ResponseLanguagePreference
 } from "./preferences-model";
@@ -25,10 +24,6 @@ interface DesktopSidecarResponse {
 
 interface DesktopRequest {
   input: string;
-  uiLanguage: SupportedUiLanguage;
-  responseStyle: AppPreferences["responseStyle"];
-  responseLanguageMode: "follow-input" | "fixed";
-  outputLanguage?: "yue-HK" | "en-GB";
 }
 
 function requireElement<T extends Element>(selector: string): T {
@@ -54,6 +49,12 @@ const missingKeySettingsButton = requireElement<HTMLButtonElement>(
 );
 const settingsBackButton = requireElement<HTMLButtonElement>(
   "#settings-back-button"
+);
+const settingsLoadingStatus = requireElement<HTMLElement>(
+  "#settings-loading-status"
+);
+const settingsCards = Array.from(
+  document.querySelectorAll<HTMLElement>(".settings-card")
 );
 const apiKeyInput = requireElement<HTMLInputElement>("#api-key-input");
 const apiKeyStatus = requireElement<HTMLElement>("#api-key-status");
@@ -104,6 +105,19 @@ function tr(key: TranslationKey): string {
 
 function setText(id: string, key: TranslationKey): void {
   requireElement<HTMLElement>(`#${id}`).textContent = tr(key);
+}
+
+function setSettingsLoading(loading: boolean, error = false): void {
+  for (const card of settingsCards) {
+    card.hidden = loading || error;
+  }
+
+  settingsLoadingStatus.hidden = !(loading || error);
+  settingsLoadingStatus.textContent = error
+    ? tr("settings.loadError")
+    : loading
+      ? tr("settings.loading")
+      : "";
 }
 
 function renderApiKeyStatus(): void {
@@ -237,7 +251,6 @@ async function refreshInstalledApps(): Promise<void> {
   } catch {
     installedApps = [];
     installedAppsLoaded = false;
-    appAccessStatus.textContent = tr("settings.appAccessLoadError");
   } finally {
     installedAppsLoading = false;
     renderInstalledAppControls();
@@ -261,14 +274,38 @@ function selectedInstalledAppIds(): string[] {
     .filter(Boolean);
 }
 
-function openSettings(): void {
+async function refreshApiKeyStatus(): Promise<void> {
+  try {
+    apiKeyConfigured = await invoke<boolean>("has_api_key");
+    setSettingsStatus("");
+  } catch {
+    apiKeyConfigured = false;
+    setSettingsStatus(tr("settings.apiError"), true);
+  }
+  renderApiKeyStatus();
+}
+
+async function openSettings(): Promise<void> {
   chatView.hidden = true;
   settingsView.hidden = false;
-  syncPreferenceControls();
-  void refreshInstalledApps();
-  if (!apiKeyConfigured) {
-    apiKeyInput.focus();
-  } else {
+  preferencesStatus.textContent = "";
+  setSettingsLoading(true);
+
+  try {
+    preferences = await loadPreferences();
+    applyTranslations();
+    syncPreferenceControls();
+    await Promise.all([refreshApiKeyStatus(), refreshInstalledApps()]);
+    syncPreferenceControls();
+    setSettingsLoading(false);
+
+    if (!apiKeyConfigured) {
+      apiKeyInput.focus();
+    } else {
+      settingsBackButton.focus();
+    }
+  } catch {
+    setSettingsLoading(false, true);
     settingsBackButton.focus();
   }
 }
@@ -294,7 +331,7 @@ function appendMessage(
   label.className = "message-label";
   label.textContent = role === "user" ? tr("chat.you") : tr("chat.assistant");
 
-  const body = document.createElement("p");
+  const body = document.createElement("div");
   body.className = "message-body";
   body.textContent = text;
 
@@ -304,22 +341,27 @@ function appendMessage(
   return body;
 }
 
+function renderAssistantResponse(
+  body: HTMLElement,
+  response: DesktopSidecarResponse
+): void {
+  if (response.kind === "llm" && response.ok) {
+    renderAssistantMarkdown(body, response.message);
+  } else {
+    body.textContent = response.message;
+  }
+
+  body.parentElement?.classList.toggle(
+    "error",
+    !response.ok || response.kind === "error"
+  );
+}
+
 function setComposerBusy(busy: boolean): void {
   requestRunning = busy;
   sendButton.disabled = busy;
   requestInput.disabled = busy;
   processingStatus.textContent = busy ? tr("chat.processing") : "";
-}
-
-async function refreshApiKeyStatus(): Promise<void> {
-  try {
-    apiKeyConfigured = await invoke<boolean>("has_api_key");
-    setSettingsStatus("");
-  } catch {
-    apiKeyConfigured = false;
-    setSettingsStatus(tr("settings.apiError"), true);
-  }
-  renderApiKeyStatus();
 }
 
 form.addEventListener("submit", async (event) => {
@@ -334,7 +376,7 @@ form.addEventListener("submit", async (event) => {
 
   if (!apiKeyConfigured) {
     missingKeyNotice.hidden = false;
-    openSettings();
+    await openSettings();
     return;
   }
 
@@ -343,23 +385,13 @@ form.addEventListener("submit", async (event) => {
   setComposerBusy(true);
   const pendingBody = appendMessage("assistant", tr("chat.processing"));
 
-  const languageSettings = sidecarLanguageSettings(preferences);
-  const request: DesktopRequest = {
-    input,
-    uiLanguage: preferences.uiLanguage,
-    responseStyle: preferences.responseStyle,
-    ...languageSettings
-  };
+  const request: DesktopRequest = { input };
 
   try {
     const response = await invoke<DesktopSidecarResponse>("run_sor_keung", {
       request
     });
-    pendingBody.textContent = response.message;
-    pendingBody.parentElement?.classList.toggle(
-      "error",
-      !response.ok || response.kind === "error"
-    );
+    renderAssistantResponse(pendingBody, response);
   } catch {
     pendingBody.textContent = tr("desktop.aiServiceUnavailable");
     pendingBody.parentElement?.classList.add("error");
@@ -377,8 +409,12 @@ requestInput.addEventListener("keydown", (event) => {
   }
 });
 
-settingsButton.addEventListener("click", openSettings);
-missingKeySettingsButton.addEventListener("click", openSettings);
+settingsButton.addEventListener("click", () => {
+  void openSettings();
+});
+missingKeySettingsButton.addEventListener("click", () => {
+  void openSettings();
+});
 settingsBackButton.addEventListener("click", closeSettings);
 
 allowAllInstalledApps.addEventListener("change", () => {
@@ -439,14 +475,16 @@ preferencesSaveButton.addEventListener("click", async () => {
     allowedAppIds: selectedInstalledAppIds()
   };
 
+  preferencesSaveButton.disabled = true;
   try {
-    await savePreferences(next);
-    preferences = next;
+    preferences = await savePreferences(next);
     applyTranslations();
     syncPreferenceControls();
     preferencesStatus.textContent = tr("settings.preferencesSaved");
   } catch {
     preferencesStatus.textContent = tr("desktop.sidecarFailure");
+  } finally {
+    preferencesSaveButton.disabled = false;
   }
 });
 
