@@ -1,0 +1,14 @@
+{
+  "name": "sor-keung",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Cantonese-first, multilingual, cross-platform desktop AI assistant.",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
