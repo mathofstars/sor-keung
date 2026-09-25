@@ -344,7 +344,7 @@ textarea {
 }
 
 .message.assistant .message-body {
-  white-space: normal;
+  white-space: pre-wrap;
 }
 
 .message.assistant .message-body > :first-child {
