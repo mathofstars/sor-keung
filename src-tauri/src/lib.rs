@@ -2,7 +2,7 @@ use keyring::{Entry, Error as KeyringError};
 use plist::Value as PlistValue;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -17,6 +17,8 @@ use tauri_plugin_store::StoreExt;
 const SIDECAR_NAME: &str = "sor-keung-sidecar";
 const KEYRING_SERVICE: &str = "com.mathofstars.sor-keung";
 const KEYRING_ACCOUNT: &str = "openrouter-api-key";
+const SETTINGS_STORE: &str = "settings.json";
+const PREFERENCES_KEY: &str = "preferences";
 
 trait CredentialStore {
     fn load(&self) -> Result<Option<String>, String>;
@@ -62,23 +64,60 @@ impl CredentialStore for KeyringCredentialStore {
     }
 }
 
-fn has_api_key_with(store: &impl CredentialStore) -> Result<bool, String> {
-    Ok(store
-        .load()?
-        .map(|secret| !secret.trim().is_empty())
-        .unwrap_or(false))
+#[derive(Default)]
+struct CredentialCache {
+    loaded: bool,
+    secret: Option<String>,
 }
 
-fn save_api_key_with(store: &impl CredentialStore, secret: &str) -> Result<(), String> {
-    let trimmed = secret.trim();
-    if trimmed.is_empty() {
-        return Err("API key is required.".into());
+#[derive(Default)]
+struct CredentialState {
+    cache: Mutex<CredentialCache>,
+}
+
+impl CredentialState {
+    fn load_or_cached(&self, store: &impl CredentialStore) -> Result<Option<String>, String> {
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| credential_store_error())?;
+
+        if cache.loaded {
+            return Ok(cache.secret.clone());
+        }
+
+        let secret = store.load()?;
+        cache.loaded = true;
+        cache.secret = secret.clone();
+        Ok(secret)
     }
-    store.save(trimmed)
-}
 
-fn delete_api_key_with(store: &impl CredentialStore) -> Result<(), String> {
-    store.delete()
+    fn save(&self, store: &impl CredentialStore, secret: &str) -> Result<(), String> {
+        let trimmed = secret.trim();
+        if trimmed.is_empty() {
+            return Err("API key is required.".into());
+        }
+
+        store.save(trimmed)?;
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| credential_store_error())?;
+        cache.loaded = true;
+        cache.secret = Some(trimmed.to_string());
+        Ok(())
+    }
+
+    fn delete(&self, store: &impl CredentialStore) -> Result<(), String> {
+        store.delete()?;
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| credential_store_error())?;
+        cache.loaded = true;
+        cache.secret = None;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -232,6 +271,96 @@ impl AppCatalogState {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+struct PreferencesWire {
+    ui_language: String,
+    response_style: String,
+    response_language: String,
+    allow_all_installed_apps: bool,
+    allowed_app_ids: Vec<String>,
+}
+
+impl Default for PreferencesWire {
+    fn default() -> Self {
+        Self {
+            ui_language: "zh-HK".into(),
+            response_style: "cantonese-hk".into(),
+            response_language: "follow-input".into(),
+            allow_all_installed_apps: true,
+            allowed_app_ids: Vec::new(),
+        }
+    }
+}
+
+fn safe_app_id(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && !trimmed
+            .chars()
+            .any(|character| character.is_control() || character == '/' || character == '\\')
+}
+
+fn normalize_preferences(mut preferences: PreferencesWire) -> PreferencesWire {
+    if preferences.ui_language != "zh-HK" && preferences.ui_language != "en-GB" {
+        preferences.ui_language = "zh-HK".into();
+    }
+
+    if preferences.response_style != "cantonese-hk"
+        && preferences.response_style != "written-zh-hk"
+    {
+        preferences.response_style = "cantonese-hk".into();
+    }
+
+    if preferences.response_language != "follow-input"
+        && preferences.response_language != "fixed-zh-HK"
+        && preferences.response_language != "fixed-en-GB"
+    {
+        preferences.response_language = "follow-input".into();
+    }
+
+    let unique: BTreeSet<String> = preferences
+        .allowed_app_ids
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| safe_app_id(value))
+        .collect();
+    preferences.allowed_app_ids = unique.into_iter().collect();
+    preferences
+}
+
+fn load_preferences_from_store(app: &AppHandle) -> Result<PreferencesWire, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|_| "Settings store is unavailable.".to_string())?;
+
+    let Some(value) = store.get(PREFERENCES_KEY) else {
+        return Ok(PreferencesWire::default());
+    };
+
+    let preferences = serde_json::from_value::<PreferencesWire>(value)
+        .map_err(|_| "Saved settings are invalid.".to_string())?;
+    Ok(normalize_preferences(preferences))
+}
+
+fn save_preferences_to_store(
+    app: &AppHandle,
+    preferences: PreferencesWire,
+) -> Result<PreferencesWire, String> {
+    let normalized = normalize_preferences(preferences);
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|_| "Settings store is unavailable.".to_string())?;
+    let value = serde_json::to_value(&normalized)
+        .map_err(|_| "Settings could not be encoded.".to_string())?;
+
+    store.set(PREFERENCES_KEY, value);
+    store
+        .save()
+        .map_err(|_| "Settings could not be saved.".to_string())?;
+    Ok(normalized)
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AppAccessPolicyWire {
@@ -239,38 +368,12 @@ struct AppAccessPolicyWire {
     allowed_app_ids: Vec<String>,
 }
 
-impl Default for AppAccessPolicyWire {
-    fn default() -> Self {
+impl From<&PreferencesWire> for AppAccessPolicyWire {
+    fn from(preferences: &PreferencesWire) -> Self {
         Self {
-            allow_all_installed_apps: true,
-            allowed_app_ids: Vec::new(),
+            allow_all_installed_apps: preferences.allow_all_installed_apps,
+            allowed_app_ids: preferences.allowed_app_ids.clone(),
         }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredPreferences {
-    allow_all_installed_apps: Option<bool>,
-    allowed_app_ids: Option<Vec<String>>,
-}
-
-fn load_app_access_policy(app: &AppHandle) -> AppAccessPolicyWire {
-    let Ok(store) = app.store("settings.json") else {
-        return AppAccessPolicyWire::default();
-    };
-
-    let Some(value) = store.get("preferences") else {
-        return AppAccessPolicyWire::default();
-    };
-
-    let Ok(preferences) = serde_json::from_value::<StoredPreferences>(value) else {
-        return AppAccessPolicyWire::default();
-    };
-
-    AppAccessPolicyWire {
-        allow_all_installed_apps: preferences.allow_all_installed_apps.unwrap_or(true),
-        allowed_app_ids: preferences.allowed_app_ids.unwrap_or_default(),
     }
 }
 
@@ -285,6 +388,28 @@ struct SidecarRequest {
     response_style: Option<String>,
     installed_apps: Option<Vec<InstalledAppRecord>>,
     app_access_policy: Option<AppAccessPolicyWire>,
+}
+
+fn apply_preferences_to_request(request: &mut SidecarRequest, preferences: &PreferencesWire) {
+    request.ui_language = Some(preferences.ui_language.clone());
+    request.response_style = Some(preferences.response_style.clone());
+
+    match preferences.response_language.as_str() {
+        "fixed-zh-HK" => {
+            request.response_language_mode = Some("fixed".into());
+            request.output_language = Some("yue-HK".into());
+        }
+        "fixed-en-GB" => {
+            request.response_language_mode = Some("fixed".into());
+            request.output_language = Some("en-GB".into());
+        }
+        _ => {
+            request.response_language_mode = Some("follow-input".into());
+            request.output_language = None;
+        }
+    }
+
+    request.app_access_policy = Some(AppAccessPolicyWire::from(preferences));
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -323,18 +448,37 @@ fn bridge_error(ui_language: Option<&str>) -> SidecarResponse {
 }
 
 #[tauri::command]
-fn has_api_key() -> Result<bool, String> {
-    has_api_key_with(&KeyringCredentialStore)
+fn has_api_key(state: State<'_, CredentialState>) -> Result<bool, String> {
+    Ok(state
+        .load_or_cached(&KeyringCredentialStore)?
+        .map(|secret| !secret.trim().is_empty())
+        .unwrap_or(false))
 }
 
 #[tauri::command]
-fn save_api_key(secret: String) -> Result<(), String> {
-    save_api_key_with(&KeyringCredentialStore, &secret)
+fn save_api_key(
+    state: State<'_, CredentialState>,
+    secret: String,
+) -> Result<(), String> {
+    state.save(&KeyringCredentialStore, &secret)
 }
 
 #[tauri::command]
-fn delete_api_key() -> Result<(), String> {
-    delete_api_key_with(&KeyringCredentialStore)
+fn delete_api_key(state: State<'_, CredentialState>) -> Result<(), String> {
+    state.delete(&KeyringCredentialStore)
+}
+
+#[tauri::command]
+fn load_preferences(app: AppHandle) -> Result<PreferencesWire, String> {
+    load_preferences_from_store(&app)
+}
+
+#[tauri::command]
+fn save_preferences(
+    app: AppHandle,
+    preferences: PreferencesWire,
+) -> Result<PreferencesWire, String> {
+    save_preferences_to_store(&app, preferences)
 }
 
 #[tauri::command]
@@ -347,18 +491,25 @@ fn list_installed_apps(
 #[tauri::command]
 async fn run_sor_keung(
     app: AppHandle,
-    state: State<'_, AppCatalogState>,
+    credential_state: State<'_, CredentialState>,
+    catalog_state: State<'_, AppCatalogState>,
     mut request: SidecarRequest,
 ) -> Result<SidecarResponse, String> {
+    let preferences = match load_preferences_from_store(&app) {
+        Ok(preferences) => preferences,
+        Err(_) => return Ok(bridge_error(request.ui_language.as_deref())),
+    };
+
+    apply_preferences_to_request(&mut request, &preferences);
     let ui_language = request.ui_language.as_deref();
-    let api_key = match KeyringCredentialStore.load() {
+
+    let api_key = match credential_state.load_or_cached(&KeyringCredentialStore) {
         Ok(Some(secret)) if !secret.trim().is_empty() => secret,
         Ok(_) => return Ok(configuration_error(ui_language)),
         Err(_) => return Ok(bridge_error(ui_language)),
     };
 
-    request.installed_apps = Some(state.list()?);
-    request.app_access_policy = Some(load_app_access_policy(&app));
+    request.installed_apps = Some(catalog_state.list()?);
 
     let mut stdin_payload =
         serde_json::to_vec(&request).map_err(|_| "Invalid Sor-Keung request.".to_string())?;
@@ -409,6 +560,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .manage(CredentialState::default())
         .manage(AppCatalogState::default())
         .setup(|app| {
             WebviewWindowBuilder::new(
@@ -428,6 +580,8 @@ pub fn run() {
             has_api_key,
             save_api_key,
             delete_api_key,
+            load_preferences,
+            save_preferences,
             list_installed_apps,
             run_sor_keung
         ])
@@ -438,15 +592,29 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
     #[derive(Default)]
     struct MemoryCredentialStore {
         secret: Mutex<Option<String>>,
+        load_count: Mutex<usize>,
+    }
+
+    impl MemoryCredentialStore {
+        fn with_secret(secret: &str) -> Self {
+            Self {
+                secret: Mutex::new(Some(secret.to_string())),
+                load_count: Mutex::new(0),
+            }
+        }
+
+        fn loads(&self) -> usize {
+            *self.load_count.lock().unwrap()
+        }
     }
 
     impl CredentialStore for MemoryCredentialStore {
         fn load(&self) -> Result<Option<String>, String> {
+            *self.load_count.lock().unwrap() += 1;
             Ok(self.secret.lock().unwrap().clone())
         }
 
@@ -462,30 +630,115 @@ mod tests {
     }
 
     #[test]
-    fn secure_store_supports_save_replace_status_and_delete() {
-        let store = MemoryCredentialStore::default();
+    fn credential_is_read_from_persistent_store_only_once_per_process_cache() {
+        let store = MemoryCredentialStore::with_secret("test-key");
+        let state = CredentialState::default();
 
-        assert!(!has_api_key_with(&store).unwrap());
-        save_api_key_with(&store, "test-key-one").unwrap();
-        assert!(has_api_key_with(&store).unwrap());
-
-        save_api_key_with(&store, "test-key-two").unwrap();
-        assert_eq!(store.load().unwrap().as_deref(), Some("test-key-two"));
-
-        delete_api_key_with(&store).unwrap();
-        assert!(!has_api_key_with(&store).unwrap());
+        assert_eq!(
+            state.load_or_cached(&store).unwrap().as_deref(),
+            Some("test-key")
+        );
+        assert_eq!(
+            state.load_or_cached(&store).unwrap().as_deref(),
+            Some("test-key")
+        );
+        assert_eq!(store.loads(), 1);
     }
 
     #[test]
-    fn empty_api_key_is_rejected() {
+    fn replacing_and_deleting_api_key_updates_session_cache() {
+        let store = MemoryCredentialStore::with_secret("old-key");
+        let state = CredentialState::default();
+
+        assert_eq!(
+            state.load_or_cached(&store).unwrap().as_deref(),
+            Some("old-key")
+        );
+        state.save(&store, "new-key").unwrap();
+        assert_eq!(
+            state.load_or_cached(&store).unwrap().as_deref(),
+            Some("new-key")
+        );
+        assert_eq!(store.loads(), 1);
+
+        state.delete(&store).unwrap();
+        assert_eq!(state.load_or_cached(&store).unwrap(), None);
+        assert_eq!(store.loads(), 1);
+    }
+
+    #[test]
+    fn empty_api_key_is_rejected_without_changing_cache() {
         let store = MemoryCredentialStore::default();
-        assert!(save_api_key_with(&store, "   ").is_err());
-        assert!(!has_api_key_with(&store).unwrap());
+        let state = CredentialState::default();
+
+        assert!(state.save(&store, "   ").is_err());
+        assert_eq!(state.load_or_cached(&store).unwrap(), None);
     }
 
     #[test]
     fn app_access_policy_defaults_to_allow_all() {
-        assert!(AppAccessPolicyWire::default().allow_all_installed_apps);
-        assert!(AppAccessPolicyWire::default().allowed_app_ids.is_empty());
+        let preferences = PreferencesWire::default();
+        let policy = AppAccessPolicyWire::from(&preferences);
+
+        assert!(policy.allow_all_installed_apps);
+        assert!(policy.allowed_app_ids.is_empty());
+    }
+
+    #[test]
+    fn written_response_preferences_are_injected_into_sidecar_request() {
+        let preferences = PreferencesWire {
+            response_style: "written-zh-hk".into(),
+            response_language: "fixed-zh-HK".into(),
+            allow_all_installed_apps: false,
+            allowed_app_ids: vec!["bundle:com.apple.MobileSMS".into()],
+            ..PreferencesWire::default()
+        };
+
+        let mut request = SidecarRequest {
+            input: "解釋量子糾纏".into(),
+            ui_language: None,
+            input_language: None,
+            output_language: None,
+            response_language_mode: None,
+            response_style: None,
+            installed_apps: None,
+            app_access_policy: None,
+        };
+
+        apply_preferences_to_request(&mut request, &preferences);
+
+        assert_eq!(request.response_style.as_deref(), Some("written-zh-hk"));
+        assert_eq!(request.response_language_mode.as_deref(), Some("fixed"));
+        assert_eq!(request.output_language.as_deref(), Some("yue-HK"));
+        let policy = request.app_access_policy.unwrap();
+        assert!(!policy.allow_all_installed_apps);
+        assert_eq!(
+            policy.allowed_app_ids,
+            vec!["bundle:com.apple.MobileSMS".to_string()]
+        );
+    }
+
+    #[test]
+    fn preference_normalization_keeps_atomic_app_policy_and_stable_ids() {
+        let normalized = normalize_preferences(PreferencesWire {
+            ui_language: "invalid".into(),
+            response_style: "invalid".into(),
+            response_language: "invalid".into(),
+            allow_all_installed_apps: false,
+            allowed_app_ids: vec![
+                "bundle:com.apple.MobileSMS".into(),
+                "../../bin/sh".into(),
+                "bundle:com.apple.MobileSMS".into(),
+            ],
+        });
+
+        assert_eq!(normalized.ui_language, "zh-HK");
+        assert_eq!(normalized.response_style, "cantonese-hk");
+        assert_eq!(normalized.response_language, "follow-input");
+        assert!(!normalized.allow_all_installed_apps);
+        assert_eq!(
+            normalized.allowed_app_ids,
+            vec!["bundle:com.apple.MobileSMS".to_string()]
+        );
     }
 }
