@@ -6,37 +6,59 @@ import {
   sidecarLanguageSettings
 } from "../desktop/preferences-model";
 
-test("Stage 3 defaults to zh-HK UI and Hong Kong conversational Cantonese", () => {
+test("Stage 3 defaults include allow-all installed application access", () => {
   assert.deepEqual(DEFAULT_PREFERENCES, {
     uiLanguage: "zh-HK",
     responseStyle: "cantonese-hk",
-    responseLanguage: "follow-input"
+    responseLanguage: "follow-input",
+    allowAllInstalledApps: true,
+    allowedAppIds: []
   });
 });
 
-test("preference normalisation preserves supported zh-HK and en-GB settings", () => {
+test("preference normalisation preserves language and app access settings", () => {
   assert.deepEqual(
     normalizePreferences({
       uiLanguage: "en-GB",
       responseStyle: "written-zh-hk",
-      responseLanguage: "fixed-zh-HK"
+      responseLanguage: "fixed-zh-HK",
+      allowAllInstalledApps: false,
+      allowedAppIds: [
+        "bundle:com.apple.MobileSMS",
+        "bundle:com.apple.Safari"
+      ]
     }),
     {
       uiLanguage: "en-GB",
       responseStyle: "written-zh-hk",
-      responseLanguage: "fixed-zh-HK"
+      responseLanguage: "fixed-zh-HK",
+      allowAllInstalledApps: false,
+      allowedAppIds: [
+        "bundle:com.apple.MobileSMS",
+        "bundle:com.apple.Safari"
+      ]
     }
   );
 });
 
-test("invalid persisted preferences fall back safely", () => {
+test("invalid persisted preferences fall back safely and reject path-like app ids", () => {
   assert.deepEqual(
     normalizePreferences({
       uiLanguage: "xx",
       responseStyle: "unknown",
-      responseLanguage: "all-languages"
+      responseLanguage: "all-languages",
+      allowAllInstalledApps: "yes",
+      allowedAppIds: [
+        "../../bin/sh",
+        "bundle:com.apple.Safari",
+        "bundle:com.apple.Safari",
+        123
+      ]
     }),
-    DEFAULT_PREFERENCES
+    {
+      ...DEFAULT_PREFERENCES,
+      allowedAppIds: ["bundle:com.apple.Safari"]
+    }
   );
 });
 
