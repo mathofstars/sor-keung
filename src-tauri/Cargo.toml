@@ -1,10 +1,10 @@
 [package]
 name = "sor-keung-desktop"
-version = "0.2.5"
-description = "Stage 2.5 macOS test wrapper for Sor-Keung"
+version = "0.3.0"
+description = "Stage 3 desktop wrapper for Sor-Keung"
 authors = ["Sor-Keung contributors"]
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88.0"
 
 [lib]
 name = "sor_keung_desktop_lib"
@@ -14,7 +14,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = "2.6.3"
 
 [dependencies]
+keyring = "4.2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = "2.11.6"
 tauri-plugin-shell = "2.3.6"
+tauri-plugin-store = "2.4.4"
