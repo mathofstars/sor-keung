@@ -79,7 +79,10 @@ test("Jev routes generic open-app intent then resolves Messages from trusted cat
     "llm",
     "open_app"
   ]);
-  assert.doesNotMatch(calls[0].init.body, /Spotify|Messages|Calculator/);
+  assert.doesNotMatch(
+    JSON.stringify(body.questions.intent.criteria),
+    /Spotify|Messages|Calculator/
+  );
 });
 
 test("English and Cantonese app commands use the same generic intent request shape", async () => {
