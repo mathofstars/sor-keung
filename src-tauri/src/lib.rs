@@ -1,11 +1,20 @@
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use std::fs::OpenOptions;
+use std::io::Write;
+use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::{
     process::CommandEvent,
     ShellExt,
 };
 
 const SIDECAR_NAME: &str = "sor-keung-sidecar";
+const STARTUP_LOG: &str = "/tmp/sor-keung-startup.log";
+
+fn startup_log(message: &str) {
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(STARTUP_LOG) {
+        let _ = writeln!(file, "{message}");
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,9 +105,38 @@ async fn run_sor_keung(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let _ = std::fs::remove_file(STARTUP_LOG);
+    startup_log("1: entered Rust run()");
+
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            startup_log("2: entered Tauri setup()");
+
+            let window = WebviewWindowBuilder::new(
+                app,
+                "main",
+                WebviewUrl::App("index.html".into()),
+            )
+            .title("Sor-Keung 傻強")
+            .inner_size(720.0, 620.0)
+            .resizable(true)
+            .visible(true)
+            .build()?;
+
+            startup_log("3: main webview window built");
+            window.show()?;
+            startup_log("4: window.show() succeeded");
+            window.set_focus()?;
+            startup_log("5: window.set_focus() succeeded");
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![run_sor_keung])
-        .run(tauri::generate_context!())
-        .expect("error while running Sor-Keung desktop wrapper");
+        .run(tauri::generate_context!());
+
+    match result {
+        Ok(_) => startup_log("6: Tauri event loop exited normally"),
+        Err(_) => startup_log("6: Tauri event loop returned an error"),
+    }
 }
