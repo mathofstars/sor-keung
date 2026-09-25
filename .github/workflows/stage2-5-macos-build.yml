@@ -2,9 +2,6 @@ name: Stage 3 macOS build
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/stage-3-desktop-ui
 
 permissions:
   contents: read
