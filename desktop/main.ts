@@ -15,15 +15,19 @@ interface DesktopRequest {
   responseLanguageMode: "follow-input";
 }
 
-const form = document.querySelector<HTMLFormElement>("#request-form");
-const apiKeyInput = document.querySelector<HTMLInputElement>("#api-key");
-const requestInput = document.querySelector<HTMLInputElement>("#request-input");
-const sendButton = document.querySelector<HTMLButtonElement>("#send-button");
-const status = document.querySelector<HTMLParagraphElement>("#status");
-
-if (!form || !apiKeyInput || !requestInput || !sendButton || !status) {
-  throw new Error("Desktop UI failed to initialise.");
+function requireElement<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) {
+    throw new Error(`Desktop UI element missing: ${selector}`);
+  }
+  return element;
 }
+
+const form = requireElement<HTMLFormElement>("#request-form");
+const apiKeyInput = requireElement<HTMLInputElement>("#api-key");
+const requestInput = requireElement<HTMLInputElement>("#request-input");
+const sendButton = requireElement<HTMLButtonElement>("#send-button");
+const status = requireElement<HTMLParagraphElement>("#status");
 
 function setStatus(
   message: string,
