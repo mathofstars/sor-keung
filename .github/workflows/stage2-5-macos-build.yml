@@ -7,7 +7,32 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install JavaScript dependencies
+        run: npm install
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Full TypeScript automated test suite
+        run: npm test
+
+      - name: Frontend production build
+        run: npm run build:frontend
+
   build-macos-arm64:
+    needs: verify
     runs-on: macos-latest
 
     steps:
@@ -30,12 +55,6 @@ jobs:
       - name: Generate Tauri iconset
         run: npm run tauri icon app-icon.svg
 
-      - name: TypeScript typecheck
-        run: npm run typecheck
-
-      - name: Full TypeScript automated test suite
-        run: npm test
-
       - name: Build Apple Silicon Node sidecar
         run: npm run build:sidecar
 
@@ -47,7 +66,7 @@ jobs:
       - name: Build frontend for Rust context tests
         run: npm run build:frontend
 
-      - name: Rust credential and bridge tests
+      - name: Rust credential, settings and bridge tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
 
       - name: Build Tauri app and DMG
