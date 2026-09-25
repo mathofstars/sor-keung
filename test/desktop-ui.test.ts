@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("Stage 3 HTML provides chat, settings and installed-app access controls", async () => {
+test("Stage 3 HTML provides chat, settings loading and installed-app access controls", async () => {
   const html = await readFile("desktop/index.html", "utf8");
 
   assert.match(html, /id="transcript"/);
   assert.match(html, /<textarea[\s\S]*id="request-input"/);
   assert.match(html, /id="settings-view"/);
+  assert.match(html, /id="settings-loading-status"/);
   assert.match(html, /id="api-key-input"/);
   assert.match(html, /id="response-style-select"/);
   assert.match(html, /id="ui-language-select"/);
@@ -37,14 +38,15 @@ test("installed app list is loaded through narrow Tauri command", async () => {
 test("visible transcript remains UI-only and current request sends one input", async () => {
   const frontend = await readFile("desktop/main.ts", "utf8");
 
-  assert.match(frontend, /const request: DesktopRequest = \{[\s\S]*input,/);
+  assert.match(frontend, /const request: DesktopRequest = \{ input \}/);
   assert.doesNotMatch(frontend, /conversationHistory|chatHistory|messages:/);
   assert.doesNotMatch(frontend, /transcript\.textContent.*run_sor_keung/);
 });
 
-test("assistant and installed-app labels use textContent rather than HTML injection", async () => {
+test("assistant LLM responses use safe Markdown renderer while user messages stay literal", async () => {
   const frontend = await readFile("desktop/main.ts", "utf8");
 
+  assert.match(frontend, /renderAssistantMarkdown\(body, response\.message\)/);
   assert.match(frontend, /body\.textContent = text/);
   assert.match(frontend, /text\.textContent = app\.displayName/);
   assert.doesNotMatch(frontend, /innerHTML/);
