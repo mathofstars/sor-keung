@@ -95,3 +95,18 @@ test("app access values remain one atomic preferences object", async () => {
   assert.match(nextPreferences, /allowedAppIds: selectedInstalledAppIds\(\)/);
   assert.match(frontend, /preferences = await savePreferences\(next\)/);
 });
+
+test("allow-all saves preserve previously selected app IDs instead of clearing hidden controls", async () => {
+  const frontend = await readFile("desktop/main.ts", "utf8");
+
+  const selectedIds = frontend.match(
+    /function selectedInstalledAppIds\(\): string\[] \{[\s\S]*?\n\}/
+  )?.[0];
+
+  assert.ok(selectedIds);
+  assert.match(
+    selectedIds,
+    /if \(allowAllInstalledApps\.checked \|\| !installedAppsLoaded\)/
+  );
+  assert.match(selectedIds, /return \[\.\.\.preferences\.allowedAppIds\]/);
+});
