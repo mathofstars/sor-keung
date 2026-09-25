@@ -30,6 +30,9 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm install
 
+      - name: Generate Tauri iconset
+        run: npm run tauri icon app-icon.svg
+
       - name: TypeScript typecheck
         run: npm run typecheck
 
