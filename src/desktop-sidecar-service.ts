@@ -1,6 +1,12 @@
 import { ActionDispatcher } from "./actions/dispatcher";
 import { MacOsActionAdapter } from "./actions/macos";
 import type { ActionAdapter } from "./actions/types";
+import {
+  DEFAULT_APP_ACCESS_POLICY,
+  StaticAppCatalog,
+  type AppAccessPolicy,
+  type InstalledAppRecord
+} from "./apps/types";
 import { SorKeungBrain } from "./brain/service";
 import type { ResponseStyle } from "./brain/types";
 import { t, type SupportedUiLanguage, type TranslationKey } from "./i18n";
@@ -15,6 +21,8 @@ export interface DesktopSidecarRequest {
   outputLanguage?: string;
   responseLanguageMode?: "follow-input" | "fixed";
   responseStyle?: ResponseStyle;
+  installedApps?: readonly InstalledAppRecord[];
+  appAccessPolicy?: AppAccessPolicy;
 }
 
 export interface DesktopSidecarResponse {
@@ -27,6 +35,7 @@ export interface DesktopSidecarDependencies {
   decisionProvider: DecisionProvider;
   llmProvider: LlmProvider;
   actionAdapter: ActionAdapter;
+  appAccessPolicy?: AppAccessPolicy;
 }
 
 function localeFor(request: DesktopSidecarRequest): SupportedUiLanguage {
@@ -69,7 +78,10 @@ export async function handleDesktopSidecarRequest(
     const brain = new SorKeungBrain(
       dependencies.decisionProvider,
       dependencies.llmProvider,
-      new ActionDispatcher(dependencies.actionAdapter)
+      new ActionDispatcher(
+        dependencies.actionAdapter,
+        dependencies.appAccessPolicy ?? DEFAULT_APP_ACCESS_POLICY
+      )
     );
 
     const response = await brain.handle({
@@ -134,17 +146,23 @@ export async function handleDesktopSidecarRequestFromEnvironment(
     };
   }
 
+  const appCatalog = new StaticAppCatalog(request.installedApps ?? []);
+  const appAccessPolicy =
+    request.appAccessPolicy ?? DEFAULT_APP_ACCESS_POLICY;
+
   try {
     return await handleDesktopSidecarRequest(request, {
       decisionProvider: new OpenRouterJevDecisionProvider({
         apiKey,
-        model: environment.DECISION_MODEL
+        model: environment.DECISION_MODEL,
+        appCatalog
       }),
       llmProvider: new OpenRouterLlmProvider({
         apiKey,
         model: environment.LLM_MODEL
       }),
-      actionAdapter: new MacOsActionAdapter()
+      actionAdapter: new MacOsActionAdapter(),
+      appAccessPolicy
     });
   } catch {
     return {
