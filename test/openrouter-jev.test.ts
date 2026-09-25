@@ -29,7 +29,7 @@ test("translates a Jev Spotify choice into Sor-Keung open_app", async () => {
       intent: {
         type: "choice",
         choice: "open_app_0",
-        probabilities: { open_app_0: 0.99, unsupported: 0.01 },
+        probabilities: { open_app_0: 0.99, llm: 0.01 },
         confidence: 0.98
       }
     }
@@ -55,15 +55,16 @@ test("translates a Jev Spotify choice into Sor-Keung open_app", async () => {
   assert.equal(body.model, "typesafe/jev-1.13");
   assert.equal(body.state, "開 Spotify");
   assert.equal(body.questions.intent.type, "choice");
+  assert.ok(body.questions.intent.criteria.llm);
 });
 
-test("English and Cantonese inputs use the same decision request shape", async () => {
+test("English and Cantonese app commands use the same decision request shape", async () => {
   const { fetchImpl, calls } = mockFetch({
     answers: {
       intent: {
         type: "choice",
         choice: "open_app_0",
-        probabilities: { open_app_0: 1 },
+        probabilities: { open_app_0: 1, llm: 0 },
         confidence: 1
       }
     }
@@ -81,14 +82,14 @@ test("English and Cantonese inputs use the same decision request shape", async (
   assert.equal(JSON.parse(calls[1].init.body).state, "Open Spotify");
 });
 
-test("unsupported or uncertain choices fail safely", async () => {
+test("general requests route to the LLM", async () => {
   const { fetchImpl } = mockFetch({
     answers: {
       intent: {
         type: "choice",
-        choice: "unsupported",
-        probabilities: { unsupported: 0.9, open_app_0: 0.1 },
-        confidence: 0.8
+        choice: "llm",
+        probabilities: { llm: 0.95, open_app_0: 0.05 },
+        confidence: 0.9
       }
     }
   });
@@ -99,8 +100,30 @@ test("unsupported or uncertain choices fail safely", async () => {
   });
 
   assert.deepEqual(await provider.decide({ text: "解釋量子糾纏" }), {
-    route: "unsupported",
-    reason: "unsupported_or_uncertain"
+    route: "llm"
+  });
+});
+
+test("uncertain decisions fall back to text-only LLM route", async () => {
+  const { fetchImpl } = mockFetch({
+    answers: {
+      intent: {
+        type: "choice",
+        choice: "open_app_0",
+        probabilities: { open_app_0: 0.55, llm: 0.45 },
+        confidence: 0.55
+      }
+    }
+  });
+
+  const provider = new OpenRouterJevDecisionProvider({
+    apiKey: "test-key",
+    fetchImpl,
+    minConfidence: 0.6
+  });
+
+  assert.deepEqual(await provider.decide({ text: "Maybe Spotify?" }), {
+    route: "llm"
   });
 });
 
@@ -114,6 +137,28 @@ test("malformed provider responses are rejected", async () => {
   await assert.rejects(
     () => provider.decide({ text: "開 Spotify" }),
     /Malformed Jev choice response/
+  );
+});
+
+test("unexpected Jev choices fail rather than silently invoking LLM", async () => {
+  const { fetchImpl } = mockFetch({
+    answers: {
+      intent: {
+        type: "choice",
+        choice: "run_shell",
+        probabilities: { run_shell: 1 },
+        confidence: 1
+      }
+    }
+  });
+  const provider = new OpenRouterJevDecisionProvider({
+    apiKey: "test-key",
+    fetchImpl
+  });
+
+  await assert.rejects(
+    () => provider.decide({ text: "Run something" }),
+    /Unexpected Jev choice/
   );
 });
 
@@ -131,7 +176,7 @@ test("missing API key fails before any request", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("API errors are reported without exposing credentials", async () => {
+test("decision API errors are reported without exposing credentials", async () => {
   const { fetchImpl } = mockFetch({}, { ok: false, status: 401 });
   const provider = new OpenRouterJevDecisionProvider({
     apiKey: "super-secret",
@@ -142,7 +187,7 @@ test("API errors are reported without exposing credentials", async () => {
     () => provider.decide({ text: "開 Spotify" }),
     (error: unknown) =>
       error instanceof Error &&
-      error.message === "OpenRouter request failed with status 401" &&
+      error.message === "OpenRouter decision request failed with status 401" &&
       !error.message.includes("super-secret")
   );
 });
