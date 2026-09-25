@@ -89,6 +89,9 @@ export async function handleDesktopSidecarRequest(
   const uiLocale = uiLocaleFor(request);
   const responseLocale = responseLocaleFor(request);
   const input = request.input?.trim();
+  const resolvedInputLanguage =
+    request.inputLanguage ??
+    (responseLocale === "en-GB" ? "en-GB" : "yue-HK");
   const responseStyle = request.responseStyle ?? "cantonese-hk";
 
   if (!input) {
@@ -111,7 +114,7 @@ export async function handleDesktopSidecarRequest(
 
     const response = await brain.handle({
       text: input,
-      inputLanguage: request.inputLanguage ?? "yue-HK",
+      inputLanguage: resolvedInputLanguage,
       outputLanguage: request.outputLanguage ?? "yue-HK",
       responseLanguageMode: request.responseLanguageMode ?? "follow-input",
       responseStyle
