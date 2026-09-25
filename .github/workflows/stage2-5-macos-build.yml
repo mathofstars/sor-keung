@@ -81,6 +81,55 @@ jobs:
         with:
           args: --target aarch64-apple-darwin --bundles app,dmg
 
+      - name: Apply Node sidecar JIT entitlement
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app"
+          SIDE="$APP/Contents/MacOS/sor-keung-sidecar"
+
+          codesign --force \
+            --sign - \
+            --options runtime \
+            --entitlements src-tauri/SidecarEntitlements.plist \
+            "$SIDE"
+
+          # Re-sign the containing bundle after changing nested code.
+          codesign --force \
+            --sign - \
+            --options runtime \
+            "$APP"
+
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          codesign -d --entitlements :- "$SIDE" 2>/dev/null > /tmp/sor-keung-sidecar-entitlements.plist
+          test "$(plutil -extract com.apple.security.cs.allow-jit raw /tmp/sor-keung-sidecar-entitlements.plist)" = "true"
+
+          # This reproduces the physical Tahoe failure mode without using any API key.
+          OUTPUT="$(printf '' | "$SIDE")"
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -F '"No sidecar request received."'
+
+      - name: Rebuild DMG from JIT-signed app
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app"
+          DMG_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg"
+          DMG="$DMG_DIR/Sor-Keung_0.3.0_aarch64.dmg"
+          STAGE="$RUNNER_TEMP/sor-keung-dmg"
+
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE" "$DMG_DIR"
+          ditto "$APP" "$STAGE/Sor-Keung.app"
+          ln -s /Applications "$STAGE/Applications"
+          rm -f "$DMG_DIR"/*.dmg
+
+          hdiutil create \
+            -volname "Sor-Keung" \
+            -srcfolder "$STAGE" \
+            -ov \
+            -format UDZO \
+            "$DMG"
+
       - name: Verify macOS launch metadata
         run: |
           APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app"
