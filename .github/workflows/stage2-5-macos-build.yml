@@ -54,11 +54,16 @@ jobs:
         with:
           args: --target aarch64-apple-darwin --bundles app,dmg
 
-      - name: Upload Sor-Keung app bundle
+      - name: Package direct-run app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip
+          unzip -l src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip | head -30
+
+      - name: Upload direct-run Sor-Keung app
         uses: actions/upload-artifact@v4
         with:
-          name: Sor-Keung-app-aarch64-apple-darwin
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app
+          name: Sor-Keung-direct-app-aarch64-apple-darwin
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Sor-Keung.app.zip
           if-no-files-found: error
 
       - name: Upload Sor-Keung DMG
