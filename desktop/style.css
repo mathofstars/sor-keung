@@ -291,3 +291,45 @@ textarea {
 [hidden] {
   display: none !important;
 }
+
+.toggle-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  margin: 0 !important;
+  font-weight: 650;
+}
+
+.toggle-row input {
+  width: auto;
+  margin: 0;
+}
+
+.app-access-list {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  margin-top: 12px;
+  padding: 4px 2px;
+  overflow-y: auto;
+}
+
+.app-access-item {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  margin: 0 !important;
+  padding: 8px 10px;
+  border: 1px solid #e1e5ea;
+  border-radius: 8px;
+  font-weight: 500 !important;
+}
+
+.app-access-item input {
+  width: auto;
+  margin: 0;
+}
+
+.error-text {
+  color: #9b2c24;
+}
