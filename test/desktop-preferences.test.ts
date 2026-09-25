@@ -91,12 +91,37 @@ test("response language preference maps to existing single-turn language control
   );
 });
 
-test("app access policy is persisted with the existing non-secret preferences store", async () => {
+test("frontend settings load and save through backend authoritative Tauri Store commands", async () => {
   const settings = await readFile("desktop/settings.ts", "utf8");
 
-  assert.match(
-    settings,
-    /store\.set\(PREFERENCES_KEY, normalizePreferences\(preferences\)\)/
-  );
-  assert.match(settings, /store\.save\(\)/);
+  assert.match(settings, /invoke<unknown>\("load_preferences"\)/);
+  assert.match(settings, /invoke<unknown>\("save_preferences"/);
+  assert.doesNotMatch(settings, /LazyStore|plugin-store|store\.set|store\.save/);
+});
+
+test("Settings reopen reloads persisted preferences before showing cards", async () => {
+  const frontend = await readFile("desktop/main.ts", "utf8");
+
+  const openSettings = frontend.match(
+    /async function openSettings\(\): Promise<void> \{[\s\S]*?\n\}/
+  )?.[0];
+
+  assert.ok(openSettings);
+  assert.match(openSettings, /setSettingsLoading\(true\)/);
+  assert.match(openSettings, /preferences = await loadPreferences\(\)/);
+  assert.match(openSettings, /syncPreferenceControls\(\)/);
+  assert.match(openSettings, /setSettingsLoading\(false\)/);
+});
+
+test("app access values remain one atomic preferences object", async () => {
+  const frontend = await readFile("desktop/main.ts", "utf8");
+
+  const nextPreferences = frontend.match(
+    /const next: AppPreferences = \{[\s\S]*?\n  \};/
+  )?.[0];
+
+  assert.ok(nextPreferences);
+  assert.match(nextPreferences, /allowAllInstalledApps: allowAllInstalledApps\.checked/);
+  assert.match(nextPreferences, /allowedAppIds: selectedInstalledAppIds\(\)/);
+  assert.match(frontend, /preferences = await savePreferences\(next\)/);
 });
