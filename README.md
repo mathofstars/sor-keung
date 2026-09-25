@@ -400,7 +400,7 @@ The previous accepted Stage 3 base and installed-app implementation were built s
 The current regression suite contains approximately:
 
 ```text
-TypeScript tests: 92
+TypeScript tests: 93
 Rust credential/settings/bridge tests: 8
 ```
 
