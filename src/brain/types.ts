@@ -12,6 +12,7 @@ export interface DecisionInput {
 
 export type DecisionResult =
   | { route: "action"; action: ActionRequest }
+  | { route: "action_error"; result: ActionResult }
   | { route: "llm" };
 
 export type BrainResponse =
