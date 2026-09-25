@@ -3,7 +3,18 @@ import test from "node:test";
 import { ActionDispatcher } from "../src/actions/dispatcher";
 import type { ActionAdapter, ActionRequest } from "../src/actions/types";
 
-test("dispatches open_app to the platform adapter", async () => {
+const spotify: ActionRequest = {
+  name: "open_app",
+  args: {
+  id: "bundle:com.spotify.client",
+  displayName: "Spotify",
+  platform: "macos" as const,
+  bundleIdentifier: "com.spotify.client",
+  launchName: "Spotify"
+}
+};
+
+test("allow-all policy dispatches resolved open_app to the platform adapter", async () => {
   const calls: ActionRequest[] = [];
   const adapter: ActionAdapter = {
     platform: "macos",
@@ -14,14 +25,54 @@ test("dispatches open_app to the platform adapter", async () => {
   };
 
   const dispatcher = new ActionDispatcher(adapter);
-  const request: ActionRequest = { name: "open_app", args: { app: "Spotify" } };
-  const result = await dispatcher.dispatch(request);
+  const result = await dispatcher.dispatch(spotify);
 
   assert.equal(result.ok, true);
-  assert.deepEqual(calls, [request]);
+  assert.deepEqual(calls, [spotify]);
 });
 
-test("does not dispatch other allowlisted actions during Stage 1", async () => {
+test("selected-app-only policy blocks installed app not explicitly enabled", async () => {
+  let called = false;
+  const adapter: ActionAdapter = {
+    platform: "macos",
+    async execute() {
+      called = true;
+      return { ok: true, code: "OK", messageKey: "actions.openedApp" };
+    }
+  };
+
+  const dispatcher = new ActionDispatcher(adapter, {
+    allowAllInstalledApps: false,
+    allowedAppIds: []
+  });
+  const result = await dispatcher.dispatch(spotify);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "APP_BLOCKED");
+  assert.equal(called, false);
+});
+
+test("selected-app-only policy dispatches explicitly enabled app", async () => {
+  const calls: ActionRequest[] = [];
+  const adapter: ActionAdapter = {
+    platform: "macos",
+    async execute(request) {
+      calls.push(request);
+      return { ok: true, code: "OK", messageKey: "actions.openedApp" };
+    }
+  };
+
+  const dispatcher = new ActionDispatcher(adapter, {
+    allowAllInstalledApps: false,
+    allowedAppIds: ["bundle:com.spotify.client"]
+  });
+  const result = await dispatcher.dispatch(spotify);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [spotify]);
+});
+
+test("does not dispatch other allowlisted actions during Stage 3", async () => {
   let called = false;
   const adapter: ActionAdapter = {
     platform: "macos",
