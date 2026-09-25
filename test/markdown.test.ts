@@ -1,1 +1,49 @@
-import assert from "node:assert/strict";\nimport test from "node:test";\nimport { markdownToSafeHtml } from "../desktop/markdown";\n\ntest("assistant Markdown renders bold text", () => {\n  const html = markdownToSafeHtml("**Downloads**");\n  assert.match(html, /<strong>Downloads<\/strong>/);\n});\n\ntest("assistant Markdown renders headings", () => {\n  const html = markdownToSafeHtml("### macOS");\n  assert.match(html, /<h3>macOS<\/h3>/);\n});\n\ntest("assistant Markdown renders unordered and ordered lists", () => {\n  const unordered = markdownToSafeHtml("- One\n- Two");\n  const ordered = markdownToSafeHtml("1. One\n2. Two");\n  assert.match(unordered, /<ul>/);\n  assert.match(unordered, /<li>One<\/li>/);\n  assert.match(unordered, /<li>Two<\/li>/);\n  assert.match(ordered, /<ol>/);\n});\n\ntest("assistant Markdown renders fenced code blocks and inline code", () => {\n  const block = markdownToSafeHtml("```sh\necho hello\n```");\n  const inline = markdownToSafeHtml("Use `npm test`.");\n  assert.match(block, /<pre><code>echo hello\n<\/code><\/pre>/);\n  assert.match(inline, /<code>npm test<\/code>/);\n});\n\ntest("assistant Markdown renders blockquotes and emphasis", () => {\n  const html = markdownToSafeHtml("> *Important*");\n  assert.match(html, /<blockquote>/);\n  assert.match(html, /<em>Important<\/em>/);\n});\n\ntest("raw HTML and active DOM content are neutralised", () => {\n  const html = markdownToSafeHtml('<script>alert("x")</script>\n<img src=x onerror="alert(1)">\n**safe**');\n  assert.doesNotMatch(html, /<script/i);\n  assert.doesNotMatch(html, /<img/i);\n  assert.doesNotMatch(html, /onerror/i);\n  assert.match(html, /<strong>safe<\/strong>/);\n});\n\ntest("Markdown safe policy does not allow links or arbitrary attributes", () => {\n  const html = markdownToSafeHtml("[click](javascript:alert(1))");\n  assert.doesNotMatch(html, /href=|javascript:/i);\n  assert.match(html, /click/);\n});\n
+import assert from "node:assert/strict";
+import test from "node:test";
+import { markdownToSafeHtml } from "../desktop/markdown";
+
+test("assistant Markdown renders bold text", () => {
+  const html = markdownToSafeHtml("**Downloads**");
+  assert.match(html, /<strong>Downloads<\/strong>/);
+});
+
+test("assistant Markdown renders headings", () => {
+  const html = markdownToSafeHtml("### macOS");
+  assert.match(html, /<h3>macOS<\/h3>/);
+});
+
+test("assistant Markdown renders unordered and ordered lists", () => {
+  const unordered = markdownToSafeHtml("- One\\n- Two");
+  const ordered = markdownToSafeHtml("1. One\\n2. Two");
+  assert.match(unordered, /<ul>/);
+  assert.match(unordered, /<li>One<\/li>/);
+  assert.match(unordered, /<li>Two<\/li>/);
+  assert.match(ordered, /<ol>/);
+});
+
+test("assistant Markdown renders fenced code blocks and inline code", () => {
+  const block = markdownToSafeHtml("```sh\\necho hello\\n```");
+  const inline = markdownToSafeHtml("Use `npm test`.");
+  assert.match(block, /<pre><code>echo hello\\n<\/code><\/pre>/);
+  assert.match(inline, /<code>npm test<\/code>/);
+});
+
+test("assistant Markdown renders blockquotes and emphasis", () => {
+  const html = markdownToSafeHtml("> *Important*");
+  assert.match(html, /<blockquote>/);
+  assert.match(html, /<em>Important<\/em>/);
+});
+
+test("raw HTML and active DOM content are neutralised", () => {
+  const html = markdownToSafeHtml('<script>alert("x")</script>\\n<img src=x onerror="alert(1)">\\n**safe**');
+  assert.doesNotMatch(html, /<script/i);
+  assert.doesNotMatch(html, /<img/i);
+  assert.doesNotMatch(html, /onerror/i);
+  assert.match(html, /<strong>safe<\/strong>/);
+});
+
+test("Markdown safe policy does not allow links or arbitrary attributes", () => {
+  const html = markdownToSafeHtml("[click](javascript:alert(1))");
+  assert.doesNotMatch(html, /href=|javascript:/i);
+  assert.match(html, /click/);
+});
