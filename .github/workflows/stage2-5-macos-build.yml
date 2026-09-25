@@ -47,6 +47,9 @@ jobs:
           file src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
           codesign --verify --verbose=2 src-tauri/binaries/sor-keung-sidecar-aarch64-apple-darwin
 
+      - name: Build frontend for Rust context tests
+        run: npm run build:frontend
+
       - name: Rust credential and bridge tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
 
