@@ -25,8 +25,15 @@ const SAFE_MARKDOWN_SCHEMA: Schema = {
   attributes: {}
 };
 
+function neutraliseRawHtml(markdown: string): string {
+  return markdown
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 export function markdownToSafeHtml(markdown: string): string {
-  const markdownTree = fromMarkdown(markdown);
+  const markdownTree = fromMarkdown(neutraliseRawHtml(markdown));
   const htmlTree = toHast(markdownTree, {
     allowDangerousHtml: false
   });
